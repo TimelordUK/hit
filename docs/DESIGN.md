@@ -113,6 +113,12 @@ Many shells append at once; one compactor occasionally rewrites.
 
 - Appends are single small writes of a whole line. On Windows the appender opens with a
   short-lived exclusive write share and retries on sharing violation (a few ms at most).
+- **Unix caveat (found by CI):** .NET on Unix has no `O_APPEND`. `FileMode.Append` seeks to
+  the end at open, and sharing is emulated with advisory `flock` (only `FileShare.None` is
+  exclusive). pwsh on Linux therefore appends under `LOCK_EX`. Go and zsh append with
+  `O_APPEND`, which is atomic per write but ignores that lock, so a pwsh line could in
+  theory overwrite one written concurrently by them. Go writers take the same lock with
+  C-004; mixed pwsh + zsh on one Linux file is part of S-014.
 - Compaction: take `hit.lock`, write `history.jsonl.new`, then re-read any lines appended to
   the old file during the rewrite, append them, atomically replace. **OPEN (C-004)** — needs a
   proper stress test with many shells hammering it.

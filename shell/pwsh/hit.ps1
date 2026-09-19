@@ -11,6 +11,12 @@
 $script:HitUlidAlphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 $script:HitUtf8 = [System.Text.UTF8Encoding]::new($false)
 
+# Share mode for appends. On Windows, FileShare.Read denies other writers but lets readers
+# in. On Unix, .NET emulates sharing with advisory flock: anything but FileShare.None takes
+# a *shared* lock, and FileMode.Append seeks to the end at open (no O_APPEND), so
+# concurrent shells would overwrite each other's lines. FileShare.None takes LOCK_EX.
+$script:HitAppendShare = if ($IsWindows) { [System.IO.FileShare]::Read } else { [System.IO.FileShare]::None }
+
 # The current time. HIT_NOW pins it for tests.
 function Get-HitNow {
     if ($env:HIT_NOW) {
@@ -85,8 +91,9 @@ function ConvertTo-HitJsonLine([System.Collections.Specialized.OrderedDictionary
 }
 
 # Appends one line to the history file, in-process. The file is opened denying other
-# writers, so concurrent shells never interleave; a sharing violation is retried for a
-# few ms. Returns $false instead of throwing if the line could not be written.
+# writers (see $HitAppendShare), so concurrent shells never interleave or overwrite;
+# a sharing violation is retried for a few ms. Returns $false instead of throwing if the
+# line could not be written.
 function Add-HitLine {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -96,7 +103,7 @@ function Add-HitLine {
     for ($attempt = 0; $attempt -lt 50; $attempt++) {
         try {
             $fs = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Append,
-                [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+                [System.IO.FileAccess]::Write, $script:HitAppendShare)
             try { $fs.Write($bytes, 0, $bytes.Length) } finally { $fs.Dispose() }
             return $true
         } catch [System.IO.DirectoryNotFoundException] {
