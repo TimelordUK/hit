@@ -151,21 +151,26 @@ The TUI draws on the console, and the chosen command is written to the temp file
 reads it and replaces the prompt buffer. (Using a temp file rather than stdout keeps the TUI's
 terminal I/O clean on Windows.)
 
-**Default keys (all subject to change by use):**
+**Default keys** (all configurable, all subject to change by use; chosen to avoid the Zellij,
+tmux, Windows Terminal and PSReadLine defaults, see §14):
 
 | Key | Action |
 |---|---|
 | Ctrl+R (from prompt) | open finder, seeded with current buffer |
+| Ctrl+R (in finder) | cycle scope: this directory → this session → this host → everything |
 | type | fuzzy filter |
-| ↑/↓, Ctrl+P/N | move |
+| ↑/↓ | move (Ctrl+P/N are **not** defaults: Zellij owns them) |
 | Enter | put command in the prompt (don't run) |
 | Tab | put command in the prompt and keep editing |
 | Ctrl+E | open in `$EDITOR`, result goes back to the prompt |
-| Alt+F | toggle "as typed" / "tidied" view of the selection (§7) |
+| Ctrl+F | toggle "as typed" / "tidied" view of the selection (§7) |
 | Del | delete from history (tombstone), with undo while finder is open |
-| Ctrl+G | cycle scope: this directory → this session → this host → everything |
 | Ctrl+X | toggle "hide failed commands" |
+| F1 / `?` on an empty query | key help overlay |
 | Esc | cancel, prompt untouched |
+
+Zellij takes most Ctrl/Alt letters, so every default here is provisional until `hit doctor`
+(F-019) checks it against the real environment.
 
 - **Multi-line is first class**: the list shows the first line with a `⏎ +3` marker, and a
   preview pane shows the full command, syntax-highlighted.
@@ -193,7 +198,7 @@ zsh does the same thing with `${(z)cmd}` (zsh's own lexer), inserting `\` + newl
 
 **Later (F-011):** convert to splatting (`$p = @{…}; Cmd @p`) for commands that are longer still.
 
-Because formatting needs the shell's parser, the finder asks the shell to do it: on Alt+F
+Because formatting needs the shell's parser, the finder asks the shell to do it: on the tidy key
 the TUI returns `{action: "format", cmd}` and the key handler formats in-process and
 re-opens the finder at the same position. **OPEN (F-006):** or pre-compute tidied forms
 in the record hook and store them as `fmt`. Try both and keep whichever feels better.
@@ -271,3 +276,104 @@ Imported records carry `"src":"psreadline"` etc. and no exit code.
 - **Config:** TOML (`BurntSushi/toml` or `pelletier/go-toml/v2`).
 - **Optional later:** a small C# `ICommandPredictor` assembly (S-020) that reads the same file,
   for PSReadLine's inline/list predictions.
+
+## 13. Testing
+
+The owner uses hit all day and reports what should change. **Changes must never quietly undo
+behaviour we've already agreed on.** Every layer is testable from day one, and CI runs all of it on
+Windows and Linux.
+
+### 13.1 Build it to be testable
+
+These hooks exist for tests first. Most turn out to be useful features too:
+
+- **Isolation:** `HIT_DATA_DIR` / `HIT_CONFIG` point everything at a temp dir. No test ever
+  touches real history.
+- **Deterministic time and ids:** the Go core takes a clock and an id source as dependencies.
+  `HIT_NOW` (tests only) pins time for shell-side record writing.
+- **Non-interactive search:** `hit search --filter <q> --scope dir --print` runs the same
+  ranking with no TUI. Tests use it, and so can scripts and fzf users.
+- **Logic separate from glue** in the shell scripts: pure functions (`Format-HitCommand`,
+  `New-HitRecord`, `Test-HitGuard`, `ConvertFrom-HitSearchResult`) are kept apart from the thin
+  PSReadLine/zle bindings. The bindings talk to the line editor through a small adapter
+  (`GetBuffer` / `ReplaceBuffer` / `Accept`) that tests replace with a fake.
+- **TUI as a pure model:** bubbletea's `Update(msg) → model` is fed key messages in tests with no
+  terminal. Rendering is checked separately.
+
+### 13.2 Layers
+
+| Layer | Tool | What it proves |
+|---|---|---|
+| Go unit | `go test`, table-driven | store merge/tombstones, ranking, dedupe, path normalisation, import parsers |
+| Go fuzz | `go test -fuzz` | reader never panics on torn/garbage lines; any command string round-trips byte-exact |
+| Go golden | `testdata/*.jsonl` → expected output files | ranking/search results don't drift unintentionally (`-update` flag to re-bless) |
+| Go stress | subprocess test | N processes appending while `compact` runs → no lost or duplicated records |
+| TUI | model tests + `teatest` golden views | key → behaviour, including narrow-pane layouts |
+| **Contract** | JSON Schema in `schema/` + shared fixtures | pwsh and zsh writers produce records the Go reader accepts, and the search result handoff parses on both sides |
+| pwsh | **Pester 5** (pwsh 7 on Windows *and* Linux) | record building, UNC/provider paths, guards, handlers against a fake line editor |
+| Formatter corpus | Pester, `tests/corpus/pwsh/*.ps1` | each case: expected tidied output **and** token-equality with the original |
+| zsh | zsh test scripts run with `zsh -f` (zunit if it earns its place) | hooks, widgets against a fake `BUFFER`, `${(z)}` formatter |
+| End-to-end smoke | Go + pty (ConPTY on Windows via `ActiveState/termtest`, creack/pty on Linux) | a real shell with the real module: type a 4-line command, Enter, record lands verbatim; Ctrl+R returns it |
+
+### 13.3 Regression workflow
+
+1. The owner reports something from daily use ("this Elastic command came back mangled").
+2. **First, a failing test or fixture.** The exact command goes into the corpus or golden files.
+3. Fix, then commit with the wishlist/bug ID.
+4. The corpus only grows, so daily use gradually becomes the test suite.
+
+**Private corpus:** `hit` can run the formatter/round-trip checks over the owner's *real*
+history locally (`Invoke-HitSelfTest`). It's never committed, but it catches the odd real-world
+commands a hand-written corpus misses.
+
+### 13.4 CI
+
+GitHub Actions matrix `windows-latest` + `ubuntu-latest` (macOS later):
+`go vet` + `go test` (+ short fuzz run) · Pester on pwsh 7 · zsh tests (Linux) · e2e smoke.
+Every push and PR, no merge on red.
+
+## 14. Environments, multiplexers and keys
+
+Typical setup: Windows Terminal → Zellij → pwsh / WSL zsh / msys2 bash in different panes.
+hit must feel the same everywhere and must not fight other tools for keys.
+
+### 14.1 Keys
+
+- **Few global bindings.** At the prompt hit claims only two keys: **Ctrl+R** (history)
+  and **Alt+C** (directories). Everything else lives *inside* the finder, where only the terminal and
+  multiplexer can still take a key first.
+- **Known key owners** (the defaults avoid these):
+  - Zellij (normal mode): Ctrl+G/P/T/N/H/S/O/Q, Alt+N, Alt+F, Alt+H/J/K/L/arrows, Alt+[/], Alt+I/O, Alt+=/-
+  - tmux: prefix Ctrl+B
+  - Windows Terminal: Alt+Enter, Ctrl+Shift+*, Alt+Shift+*
+  - PSReadLine (Windows mode): many Ctrl/Alt defaults, re-bound only for our two keys
+- **Keymap is data** (F-018): all keys come from `config.toml`, so a clash is a config
+  change, not a code change.
+- **`hit doctor`** (F-019) detects the environment (`$ZELLIJ`, `$TMUX`, `$WT_SESSION`,
+  `$TERM_PROGRAM`, WSL, msys2) and reports clashes between hit's keymap and the known
+  defaults of whatever it's running under.
+- **Leader key: not yet.** A tmux-style leader inside the finder (e.g. Ctrl+Space then a letter) is
+  kept as an option (F-022). The keymap design lets us add it without a rewrite, and we'll only add it if
+  real clashes pile up.
+- **No-key fallback:** typing `h` (or `hit`) always opens the finder, for when some layer eats
+  the key.
+
+### 14.2 Several shells, several environments
+
+- **Shell family filter:** by default the finder shows commands from the *current* shell family
+  (pwsh vs POSIX shells), and a scope toggle includes everything. Pasting a bash one-liner into pwsh
+  is rarely what you want.
+- **WSL / msys2 / Windows sharing one history** needs C-011 (per-host/per-env files). Each
+  environment appends only to its own file (`history-<host>-<env>.jsonl`) in a shared dir and
+  reads all of them. There's no cross-boundary file locking, which matters because locking over WSL's
+  `/mnt/c` is unreliable.
+- **Path translation:** `/mnt/c/dev`, `/c/dev` (msys2) and `C:\dev` are the same directory.
+  The directory finder shows each path in the current environment's form (F-021).
+
+### 14.3 Terminal differences
+
+- Works in Windows Terminal, conhost, Zellij, tmux, over SSH. No mouse needed.
+- Respects `NO_COLOR`; falls back to 16 colours.
+- **Inline mode** (draw N lines under the prompt) vs **full-screen** (alternate screen) is
+  configurable. In a small Zellij pane, inline is usually nicer (F-020).
+- Layout adapts to pane size: preview beside the list when wide, below when narrow, hidden when tiny.

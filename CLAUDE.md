@@ -7,3 +7,6 @@
 - The stored command is never modified. Formatting is a view or insert option only.
 - Nothing on the prompt hot path may spawn a process, touch the network, or stat a remote path.
 - The owner dogfoods on pwsh 7 / Windows daily; ergonomics decided by use beat theory.
+- Bug or behaviour change from daily use: add a failing test/fixture first, then fix (DESIGN §13.3).
+- All tests isolate via `HIT_DATA_DIR`/`HIT_CONFIG` temp dirs; never touch real history.
+- Default keys must avoid Zellij/tmux/Windows Terminal defaults (DESIGN §14.1).

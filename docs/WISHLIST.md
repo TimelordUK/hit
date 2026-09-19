@@ -25,13 +25,20 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-008 | `hit import mcfly` (SQLite, import-only dependency) | M1 | idea |
 | C-009 | `hit import zsh` (EXTENDED_HISTORY) and `hit import atuin` | M3 | idea |
 | C-010 | `hit init <shell>` emits the integration script matching the binary version | M1 | planned |
-| C-011 | Per-host history files for conflict-free file sync; reader merges | later | idea |
+| C-011 | Per-host/per-env history files (Windows, WSL, msys2, other machines); each appends only to its own, reader merges all | M3 | planned |
 | C-012 | Resolve mapped drives ↔ UNC so `Z:\logs` and `\\srv\share\logs` find each other | M2 | idea |
 | C-013 | Guard rules in `config.toml`, compiled into shell-native checks; reload on change | M2 | idea |
 | C-014 | Secret redaction patterns (don't record / mask) applied before writing | M1 | idea |
 | C-015 | Binary index cache beside the JSONL if load time ever becomes noticeable | later | idea |
 | C-016 | `hit stats`: most-used commands, dirs, failure rates | later | idea |
 | C-017 | Export / query-friendly view for `sql-cli` (flattened cmd+end rows as CSV/JSONL) | later | idea |
+| C-018 | Test hooks: `HIT_DATA_DIR`/`HIT_CONFIG` isolation, injected clock + id source, `HIT_NOW` | M1 | planned |
+| C-019 | `hit search --filter … --print` (non-interactive, same ranking) | M1 | planned |
+| C-020 | Fuzz tests: reader tolerance + byte-exact round-trip of any command string | M1 | planned |
+| C-021 | Golden tests for search/ranking under `testdata/` with `-update` | M1 | planned |
+| C-022 | JSON Schema for records + result handoff in `schema/`; shared fixtures for all writers | M1 | planned |
+| C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | planned |
+| C-024 | Multi-process append + compact stress test | M1 | planned |
 
 ## Shell
 
@@ -51,7 +58,13 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-012 | zsh: antidote-installable plugin layout | M3 | planned |
 | S-013 | zsh: `accept-line` guard wrapper | M3 | idea |
 | S-014 | pwsh on Linux: verify everything works as on Windows | M3 | idea |
+| S-015 | pwsh: Pester 5 suite; line-editor adapter (Get/Replace/Accept) so handlers run against a fake | M1 | planned |
+| S-016 | pwsh: formatter corpus `tests/corpus/pwsh/` (expected output + token-equality) | M1 | planned |
+| S-017 | e2e smoke via pty/ConPTY: real shell + module, type multi-line, assert record; Ctrl+R recall | M1 | planned |
+| S-018 | zsh: test harness (`zsh -f`, fake BUFFER) | M3 | planned |
+| S-019 | `Invoke-HitSelfTest`: run formatter/round-trip checks over the owner's real history, locally only | M1 | idea |
 | S-020 | C# `ICommandPredictor` plugin reading hit's history for PSReadLine predictions | later | idea |
+| S-021 | `h` / `hit` command opens the finder as a no-key fallback | M1 | planned |
 
 ## Features / UX
 
@@ -74,3 +87,8 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-015 | Find files under previously visited dirs (search inside where you've been) | later | idea |
 | F-016 | Time filter ("last week", "Monday") in the finder | later | idea |
 | F-017 | Guard conditions on time/day (extra-strict before 10:00 on a Monday) | later | idea |
+| F-018 | Keymap from `config.toml`, no hard-coded keys | M1 | planned |
+| F-019 | `hit doctor`: detect Zellij/tmux/WT/WSL/msys2, report key clashes and setup problems | M2 | idea |
+| F-020 | Inline vs full-screen mode; layout adapts to pane size (side/below/hidden preview) | M1 | idea |
+| F-021 | Shell-family filter by default; WSL/msys2/Windows path translation in dir finder | M3 | idea |
+| F-022 | Leader key inside the finder, only if clashes pile up | ? | idea |
