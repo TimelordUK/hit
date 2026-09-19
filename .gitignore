@@ -1,0 +1,5 @@
+/hit
+/hit.exe
+/dist/
+*.test
+*.out
