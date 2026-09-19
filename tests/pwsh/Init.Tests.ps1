@@ -69,6 +69,17 @@ Describe 'hit init pwsh' {
         $r[1].ms | Should -BeGreaterOrEqual 0
     }
 
+    # From daily use (2026-09-19): `clear` recorded as ~120 ms because the time starship
+    # took to draw the prompt was counted in the command's duration.
+    It 'does not count the time the wrapped prompt takes in the duration' {
+        $function:global:prompt = { Start-Sleep -Milliseconds 300; 'slow starship> ' }
+        Get-Module hit | Remove-Module
+        Invoke-Expression (& $script:Exe init pwsh | Out-String)
+        Send-Line 'clear' | Out-Null
+        Show-Prompt | Out-Null
+        (Read-HitHistory | Where-Object k -EQ end).ms | Should -BeLessThan 150
+    }
+
     It 'chains the previous handler (mcfly keeps working)' {
         Send-Line 'git status' | Out-Null
         $global:McflySaw | Should -Be @('git status')

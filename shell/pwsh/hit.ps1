@@ -182,12 +182,14 @@ function Invoke-HitAddToHistory([string]$Line) {
 
 # The prompt hook body: the end record for the pending command, and a cd record when the
 # location changed. Idempotent, so being reached twice through a chain of wrappers is fine.
-function Invoke-HitPrompt([bool]$Success, $ExitCode) {
+# $At is when the prompt started (Stopwatch timestamp): the command's duration ends there,
+# not after the wrapped prompt has drawn itself.
+function Invoke-HitPrompt([bool]$Success, $ExitCode, [long]$At = [System.Diagnostics.Stopwatch]::GetTimestamp()) {
     try {
         if (-not $script:HitHistoryPath) { return }
         if ($p = $script:HitPending) {
             $script:HitPending = $null
-            $ms = [long][System.Diagnostics.Stopwatch]::GetElapsedTime($p.Start).TotalMilliseconds
+            $ms = [long][System.Diagnostics.Stopwatch]::GetElapsedTime($p.Start, $At).TotalMilliseconds
             # $LASTEXITCODE only changes for native commands, so it can be stale: trust it
             # only when the command failed and it is non-zero.
             $exit = if ($Success) { 0 } elseif ($ExitCode -is [int] -and $ExitCode -ne 0) { $ExitCode } else { 1 }
@@ -229,10 +231,11 @@ function Register-HitPrompt {
     $hook = ${function:Invoke-HitPrompt}  # module-bound, so it can reach hit's private state
     $wrapper = {
         $hitOk = $global:?
+        $hitAt = [System.Diagnostics.Stopwatch]::GetTimestamp()
         $hitExit = $global:LASTEXITCODE
         if (-not $hitOk) { Write-Error '' -ErrorAction Ignore }  # sets $? back to false
         $hitOut = & $prev
-        & $hook $hitOk $hitExit
+        & $hook $hitOk $hitExit $hitAt
         $hitOut
     }.GetNewClosure()
     $function:global:prompt = $wrapper
