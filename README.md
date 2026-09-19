@@ -5,7 +5,11 @@ PowerShell and zsh.
 
 > You never lose something you typed, and you never lose somewhere you went.
 
-**Status:** design phase. Nothing to install yet.
+**Status:** M1 in progress (core store and test harness). Nothing to install yet.
+
+## Development
+
+Needs Go and PowerShell 7 with Pester 5+. `./scripts/test.ps1` runs what CI runs.
 
 ## Why another history tool?
 

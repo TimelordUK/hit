@@ -15,8 +15,8 @@ Every idea goes here, however wild. We refine them by using the tool.
 
 | ID | Item | MS | Status |
 |---|---|---|---|
-| C-001 | JSONL store: tolerant reader, record kinds `cmd`/`end`/`cd`/`del`, merge by id | M1 | planned |
-| C-002 | ULID ids; data/config dir resolution with env overrides | M1 | planned |
+| C-001 | JSONL store: tolerant reader, record kinds `cmd`/`end`/`cd`/`del`, merge by id | M1 | done |
+| C-002 | ULID ids; data/config dir resolution with env overrides | M1 | done |
 | C-003 | Tombstone deletion (`hit rm <id>`), hidden immediately | M1 | planned |
 | C-004 | `hit compact`: lock, rewrite, catch late appends, atomic swap; many-shell stress test | M1 | planned |
 | C-005 | Fuzzy match + ranking (match × recency × frequency × same-dir × success) | M1 | planned |
@@ -32,19 +32,19 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-015 | Binary index cache beside the JSONL if load time ever becomes noticeable | later | idea |
 | C-016 | `hit stats`: most-used commands, dirs, failure rates | later | idea |
 | C-017 | Export / query-friendly view for `sql-cli` (flattened cmd+end rows as CSV/JSONL) | later | idea |
-| C-018 | Test hooks: `HIT_DATA_DIR`/`HIT_CONFIG` isolation, injected clock + id source, `HIT_NOW` | M1 | planned |
+| C-018 | Test hooks: `HIT_DATA_DIR`/`HIT_CONFIG` isolation, injected clock + id source, `HIT_NOW` | M1 | done |
 | C-019 | `hit search --filter … --print` (non-interactive, same ranking) | M1 | planned |
-| C-020 | Fuzz tests: reader tolerance + byte-exact round-trip of any command string | M1 | planned |
+| C-020 | Fuzz tests: reader tolerance + byte-exact round-trip of any command string | M1 | done |
 | C-021 | Golden tests for search/ranking under `testdata/` with `-update` | M1 | planned |
-| C-022 | JSON Schema for records + result handoff in `schema/`; shared fixtures for all writers | M1 | planned |
-| C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | planned |
+| C-022 | JSON Schema for records + result handoff in `schema/`; shared fixtures for all writers | M1 | doing |
+| C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | doing |
 | C-024 | Multi-process append + compact stress test | M1 | planned |
 
 ## Shell
 
 | ID | Item | MS | Status |
 |---|---|---|---|
-| S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | planned |
+| S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | doing |
 | S-002 | pwsh: prompt wrapper writes `end` (exit, duration) and `cd` records | M1 | planned |
 | S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result | M1 | planned |
 | S-004 | pwsh: `Format-HitCommand` tidy via the PowerShell parser, with a token-equality check | M1 | planned |
@@ -58,7 +58,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-012 | zsh: antidote-installable plugin layout | M3 | planned |
 | S-013 | zsh: `accept-line` guard wrapper | M3 | idea |
 | S-014 | pwsh on Linux: verify everything works as on Windows | M3 | idea |
-| S-015 | pwsh: Pester 5 suite; line-editor adapter (Get/Replace/Accept) so handlers run against a fake | M1 | planned |
+| S-015 | pwsh: Pester 5 suite; line-editor adapter (Get/Replace/Accept) so handlers run against a fake | M1 | doing |
 | S-016 | pwsh: formatter corpus `tests/corpus/pwsh/` (expected output + token-equality) | M1 | planned |
 | S-017 | e2e smoke via pty/ConPTY: real shell + module, type multi-line, assert record; Ctrl+R recall | M1 | planned |
 | S-018 | zsh: test harness (`zsh -f`, fake BUFFER) | M3 | planned |
