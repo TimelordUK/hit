@@ -5,25 +5,64 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+
+	"github.com/TimelordUK/hit/internal/paths"
+	"github.com/TimelordUK/hit/shell"
 )
 
 // version is set at build time with -ldflags "-X main.version=…".
 var version = "dev"
 
+const usage = `usage: hit <command>
+
+commands:
+  init pwsh   print the PowerShell integration; in $PROFILE:
+                Invoke-Expression (& hit init pwsh | Out-String)
+  version     print the version`
+
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	home, _ := os.UserHomeDir()
+	env := paths.Env{Getenv: os.Getenv, GOOS: runtime.GOOS, Home: home}
+	os.Exit(run(os.Args[1:], env, os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: hit <command>\n\ncommands:\n  version")
+		fmt.Fprintln(stderr, usage)
 		return 2
 	}
 	switch args[0] {
 	case "version", "--version", "-V":
 		fmt.Fprintln(stdout, "hit", version)
 		return 0
+	case "init":
+		return runInit(args[1:], env, stdout, stderr)
+	case "help", "--help", "-h":
+		fmt.Fprintln(stdout, usage)
+		return 0
 	}
 	fmt.Fprintf(stderr, "hit: unknown command %q\n", args[0])
 	return 2
+}
+
+func runInit(args []string, env paths.Env, stdout, stderr io.Writer) int {
+	if len(args) != 1 || (args[0] != "pwsh" && args[0] != "powershell") {
+		fmt.Fprintln(stderr, "usage: hit init pwsh")
+		return 2
+	}
+	hist, err := paths.History(env)
+	if err != nil {
+		fmt.Fprintln(stderr, "hit:", err)
+		return 1
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "hit"
+	}
+	if err := shell.WritePwsh(stdout, hist, exe, version); err != nil {
+		fmt.Fprintln(stderr, "hit:", err)
+		return 1
+	}
+	return 0
 }

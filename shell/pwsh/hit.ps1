@@ -117,3 +117,153 @@ function Add-HitLine {
     }
     $false
 }
+
+# ---------------------------------------------------------------------------------------
+# Capture (S-001, S-002, S-005, S-006). Everything below runs on Enter or at the prompt:
+# in-process only, and wrapped so a failure never reaches the user.
+# ---------------------------------------------------------------------------------------
+
+$script:HitHistoryPath = $null   # set by Enable-Hit; $null = disabled
+$script:HitHostName = [Environment]::MachineName
+$script:HitSessionId = $null
+$script:HitPending = $null       # the recorded command that hasn't reached a prompt yet
+$script:HitLastDir = $null
+$script:HitPrevHandler = $null   # AddToHistoryHandler we chain to
+$script:HitHandler = $null       # our handler, as PSReadLine stores it
+$script:HitPrevPrompt = $null    # prompt we wrapped last (restored by Disable-Hit)
+$script:HitPromptWrapper = $null # our current prompt wrapper
+$script:HitInHandler = $false    # re-entry guard: a chained handler may call back into ours
+
+# FileSystem: the provider path, so UNC shares are stored as \server\share rather than
+# Microsoft.PowerShell.Core\FileSystem::\server\share and custom PSDrives resolve.
+# Other providers (HKLM:\, Cert:\): the PowerShell path, which Set-Location understands.
+function Get-HitLocationPath([System.Management.Automation.PathInfo]$Location) {
+    if ($Location.Provider.Name -eq 'FileSystem') { $Location.ProviderPath } else { $Location.Path }
+}
+
+# Whether a line accepted at the prompt should be recorded. $Verdict is what the chained
+# AddToHistoryHandler said: PSReadLine's default returns MemoryOnly for lines that look
+# sensitive (password, token, apikey, secret…), and hit doesn't write those either.
+function Test-HitShouldRecord([string]$Line, $Verdict) {
+    if ([string]::IsNullOrWhiteSpace($Line)) { return $false }
+    if ($Line[0] -eq ' ') { return $false }  # leading space: don't record (S-006)
+    if ($Verdict -is [bool]) { return $Verdict }
+    if ($null -eq $Verdict) { return $true }
+    "$Verdict" -eq 'MemoryAndFile'
+}
+
+# The AddToHistoryHandler body. Returns the chained handler's verdict unchanged so
+# PSReadLine's own history (Up arrow, predictions) keeps working as before.
+function Invoke-HitAddToHistory([string]$Line) {
+    if ($script:HitInHandler) { return $true }
+    $verdict = $true
+    if ($script:HitPrevHandler) {
+        $script:HitInHandler = $true
+        try { $verdict = $script:HitPrevHandler.Invoke($Line) } catch { $verdict = $true }
+        finally { $script:HitInHandler = $false }
+    }
+    try {
+        if ($script:HitHistoryPath -and (Test-HitShouldRecord $Line $verdict)) {
+            # A command recorded earlier never reached our prompt hook: something replaced
+            # the prompt after us. Wrap it again.
+            if ($script:HitPending) { Register-HitPrompt }
+            $now = Get-HitNow
+            $id = New-HitId $now
+            $rec = New-HitRecord -Kind cmd -Id $id -Timestamp (ConvertTo-HitTimestamp $now) -Command $Line `
+                -Cwd (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation) `
+                -Shell pwsh -HostName $script:HitHostName -SessionId $script:HitSessionId
+            if (Add-HitLine -Path $script:HitHistoryPath -Line (ConvertTo-HitJsonLine $rec)) {
+                $script:HitPending = @{ Id = $id; Start = [System.Diagnostics.Stopwatch]::GetTimestamp() }
+            }
+        }
+    } catch { }
+    $verdict
+}
+
+# The prompt hook body: the end record for the pending command, and a cd record when the
+# location changed. Idempotent, so being reached twice through a chain of wrappers is fine.
+function Invoke-HitPrompt([bool]$Success, $ExitCode) {
+    try {
+        if (-not $script:HitHistoryPath) { return }
+        if ($p = $script:HitPending) {
+            $script:HitPending = $null
+            $ms = [long][System.Diagnostics.Stopwatch]::GetElapsedTime($p.Start).TotalMilliseconds
+            # $LASTEXITCODE only changes for native commands, so it can be stale: trust it
+            # only when the command failed and it is non-zero.
+            $exit = if ($Success) { 0 } elseif ($ExitCode -is [int] -and $ExitCode -ne 0) { $ExitCode } else { 1 }
+            $null = Add-HitLine -Path $script:HitHistoryPath -Line (ConvertTo-HitJsonLine (
+                    New-HitRecord -Kind end -Id $p.Id -ExitCode $exit -DurationMs $ms))
+        }
+        $dir = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
+        if ($dir -ne $script:HitLastDir) {
+            $script:HitLastDir = $dir
+            $null = Add-HitLine -Path $script:HitHistoryPath -Line (ConvertTo-HitJsonLine (
+                    New-HitRecord -Kind cd -Timestamp (ConvertTo-HitTimestamp (Get-HitNow)) -Dir $dir `
+                        -Shell pwsh -HostName $script:HitHostName -SessionId $script:HitSessionId))
+        }
+        # Something set its own AddToHistoryHandler after us (e.g. a later init script):
+        # chain it and take over again.
+        if ($script:HitHandler -and
+            -not [object]::ReferenceEquals((Get-PSReadLineOption).AddToHistoryHandler, $script:HitHandler)) {
+            Register-HitHistoryHandler
+        }
+    } catch { }
+}
+
+function Register-HitHistoryHandler {
+    $current = (Get-PSReadLineOption).AddToHistoryHandler
+    if (-not [object]::ReferenceEquals($current, $script:HitHandler)) { $script:HitPrevHandler = $current }
+    Set-PSReadLineOption -AddToHistoryHandler { param([string]$line) Invoke-HitAddToHistory $line }
+    $script:HitHandler = (Get-PSReadLineOption).AddToHistoryHandler
+}
+
+# Wraps the current global prompt (starship, zoxide's wrapper, …). $? is captured first and
+# restored before the wrapped prompt runs, so prompts that show the last status still see it.
+# Each wrapper closes over its own $prev: after a re-wrap the chain can reach us twice
+# (Invoke-HitPrompt is idempotent) but never loops.
+function Register-HitPrompt {
+    $current = $function:global:prompt
+    if ([object]::ReferenceEquals($current, $script:HitPromptWrapper)) { return }
+    $script:HitPrevPrompt = $current
+    $prev = $current
+    $hook = ${function:Invoke-HitPrompt}  # module-bound, so it can reach hit's private state
+    $wrapper = {
+        $hitOk = $global:?
+        $hitExit = $global:LASTEXITCODE
+        if (-not $hitOk) { Write-Error '' -ErrorAction Ignore }  # sets $? back to false
+        $hitOut = & $prev
+        & $hook $hitOk $hitExit
+        $hitOut
+    }.GetNewClosure()
+    $function:global:prompt = $wrapper
+    $script:HitPromptWrapper = $function:global:prompt
+}
+
+# Starts recording. Called at the end of `hit init pwsh` with the history path the Go
+# binary resolved, so there is one implementation of the path rules.
+function Enable-Hit {
+    param([Parameter(Mandatory)][string]$HistoryPath)
+    if (-not (Get-Module PSReadLine)) { return }  # not an interactive console host
+    $script:HitHistoryPath = $HistoryPath
+    $script:HitSessionId = New-HitId
+    $script:HitLastDir = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
+    Register-HitHistoryHandler
+    Register-HitPrompt
+}
+
+# Stops recording and puts back the handler and prompt hit wrapped.
+function Disable-Hit {
+    if (-not $script:HitHistoryPath) { return }
+    $script:HitHistoryPath = $null
+    if ($script:HitHandler -and
+        [object]::ReferenceEquals((Get-PSReadLineOption).AddToHistoryHandler, $script:HitHandler)) {
+        Set-PSReadLineOption -AddToHistoryHandler $script:HitPrevHandler
+    }
+    if ($script:HitPromptWrapper -and
+        [object]::ReferenceEquals($function:global:prompt, $script:HitPromptWrapper)) {
+        $function:global:prompt = $script:HitPrevPrompt
+    }
+    $script:HitHandler = $null
+    $script:HitPromptWrapper = $null
+    $script:HitPending = $null
+}

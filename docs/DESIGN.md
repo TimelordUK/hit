@@ -133,14 +133,36 @@ cache beside the file, rebuilt from the JSONL (which remains the source of truth
 
 ### PowerShell (PSReadLine ≥ 2.2)
 
-- `Set-PSReadLineOption -AddToHistoryHandler` receives the **full multi-line command**.
-  Write the `cmd` record there and return `$true` so PSReadLine's own history still works.
-- `prompt` function wrapper: writes the `end` record (`$?`, `$LASTEXITCODE`, duration from
-  `Get-History -Count 1`) and a `cd` record when `$PWD` changed.
-- Record `cwd` as `$PWD.ProviderPath` for FileSystem so UNC paths are stored as
+Loaded from `$PROFILE` with `Invoke-Expression (& hit init pwsh | Out-String)`. The binary
+prints `shell/pwsh/hit.ps1` wrapped in a dynamic module (`New-Module hit … | Import-Module
+-Global`) and ends with `Enable-Hit -HistoryPath '<path>'`. The binary resolves the path, so
+the path rules exist only once (Go). `Disable-Hit` puts everything back; `Remove-Module hit`
+unloads it. This is the only process spawn, and it happens once at shell startup.
+
+- **Record on Enter:** `Set-PSReadLineOption -AddToHistoryHandler` receives the **full
+  multi-line command** and appends the `cmd` record in-process.
+  The handler **chains** whatever handler was installed before (PSReadLine's default, mcfly,
+  …) and returns that handler's verdict unchanged, so PSReadLine's own history, Up arrow and
+  predictions work as before, and hit can run side by side with mcfly while being trialled.
+- **Sensitive commands:** if the chained handler says `MemoryOnly`/`SkipAdding` (PSReadLine's
+  default does for lines that look like they hold a password/token/apikey/secret), hit doesn't
+  record the line either. C-014 adds hit's own rules.
+- **Prompt wrapper:** wraps the current global `prompt` (starship, zoxide's wrapper, …) and
+  writes the `end` record (exit code, duration measured from Enter) and a `cd` record when the
+  location changed. It captures `$?` first and restores it (`Write-Error -ErrorAction Ignore`)
+  before calling the wrapped prompt, so starship's status indicator still sees the real value.
+  Exit code: 0 if `$?`; otherwise `$LASTEXITCODE` if non-zero, else 1 (`$LASTEXITCODE` is
+  stale after cmdlets).
+- **Self-healing:** init scripts that run later can replace the prompt or the handler.
+  If a recorded command never reaches hit's prompt hook, the next Enter wraps the prompt
+  again. If the handler isn't hit's at prompt time, hit re-registers and chains the newcomer.
+  Each wrapper closes over its own predecessor, and the handler has a re-entry guard, so
+  mutual wrapping can't loop. The hooks are idempotent, so being reached twice is harmless.
+- Record `cwd` as `$PWD.ProviderPath` for FileSystem, so UNC paths are stored as
   `\\server\share\…`, not `Microsoft.PowerShell.Core\FileSystem::\\server\…`.
-  Non-filesystem providers (`HKLM:`, `Cert:`) are stored as-is with the provider name.
+  Non-filesystem providers (`HKLM:`, `Cert:`) store the PowerShell path (`HKLM:\SOFTWARE`).
 - Leading-space commands are not recorded (opt-out convention, like bash `HISTCONTROL`).
+- Cost: ~0.8 ms per command (Enter + prompt, two appends) on the owner's machine.
 
 ### zsh
 

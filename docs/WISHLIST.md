@@ -22,9 +22,9 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-005 | Fuzzy match + ranking (match × recency × frequency × same-dir × success) | M1 | planned |
 | C-006 | Duplicate collapse with run count / last run | M1 | planned |
 | C-007 | `hit import psreadline` (backtick-continued multi-line entries) | M1 | planned |
-| C-008 | `hit import mcfly` (SQLite, import-only dependency) | M1 | idea |
+| C-008 | `hit import mcfly` (SQLite, import-only dependency). mcfly redirects PSReadLine's history file to a temp file, so its DB holds the recent history | M1 | planned |
 | C-009 | `hit import zsh` (EXTENDED_HISTORY) and `hit import atuin` | M3 | idea |
-| C-010 | `hit init <shell>` emits the integration script matching the binary version | M1 | planned |
+| C-010 | `hit init <shell>` emits the integration script matching the binary version (pwsh done) | M1 | doing |
 | C-011 | Per-host/per-env history files (Windows, WSL, msys2, other machines); each appends only to its own, reader merges all | M3 | planned |
 | C-012 | Resolve mapped drives ↔ UNC so `Z:\logs` and `\\srv\share\logs` find each other | M2 | idea |
 | C-013 | Guard rules in `config.toml`, compiled into shell-native checks; reload on change | M2 | idea |
@@ -39,17 +39,18 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-022 | JSON Schema for records + result handoff in `schema/`; shared fixtures for all writers | M1 | doing |
 | C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | doing |
 | C-024 | Multi-process append + compact stress test | M1 | planned |
+| C-025 | `hit import zoxide` (`zoxide query --list --score`) so directory ranking carries over | M2 | idea |
 
 ## Shell
 
 | ID | Item | MS | Status |
 |---|---|---|---|
-| S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | doing |
-| S-002 | pwsh: prompt wrapper writes `end` (exit, duration) and `cd` records | M1 | planned |
-| S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result | M1 | planned |
+| S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | done |
+| S-002 | pwsh: prompt wrapper writes `end` (exit, duration) and `cd` records | M1 | done |
+| S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result. Must work in vi insert mode (owner uses `-EditMode vi`) | M1 | planned |
 | S-004 | pwsh: `Format-HitCommand` tidy via the PowerShell parser, with a token-equality check | M1 | planned |
-| S-005 | pwsh: store `$PWD.ProviderPath` (clean UNC), handle non-FS providers | M1 | planned |
-| S-006 | pwsh: leading-space = don't record | M1 | idea |
+| S-005 | pwsh: store `$PWD.ProviderPath` (clean UNC), handle non-FS providers | M1 | done |
+| S-006 | pwsh: leading-space = don't record | M1 | done |
 | S-007 | pwsh: Enter guard (re-bind AcceptLine) for prod rules | M2 | idea |
 | S-008 | pwsh: Alt+C directory finder → `Set-Location`; `j <terms>` jump | M2 | planned |
 | S-009 | pwsh: Up/Down stepping backed by hit (prefix-filtered, multi-line aware) instead of PSReadLine's | ? | idea |
@@ -73,9 +74,9 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-001 | Finder TUI: fuzzy list, multi-line preview pane with `⏎ +N` markers | M1 | planned |
 | F-002 | Del in finder = delete (with undo while open) | M1 | planned |
 | F-003 | Ctrl+E: edit selection in `$EDITOR`, return to prompt | M1 | planned |
-| F-004 | Ctrl+G scope cycle: dir → session → host → all | M1 | planned |
+| F-004 | Ctrl+R (again, inside the finder) scope cycle: dir → session → host → all | M1 | planned |
 | F-005 | Hide failed commands toggle; show exit code / duration / cwd in preview | M1 | idea |
-| F-006 | Alt+F toggle "as typed" / "tidied"; decide format-on-demand vs pre-computed `fmt` | M1 | idea |
+| F-006 | Ctrl+F toggle "as typed" / "tidied"; decide format-on-demand vs pre-computed `fmt` | M1 | idea |
 | F-007 | Syntax highlighting in the preview (pwsh and zsh) | later | idea |
 | F-008 | Directory finder: frecency, never stats remote paths, explicit existence check on jump | M2 | planned |
 | F-009 | Pivot: dir → commands run there; command → jump to its dir | M2 | idea |
@@ -92,3 +93,4 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-020 | Inline vs full-screen mode; layout adapts to pane size (side/below/hidden preview) | M1 | idea |
 | F-021 | Shell-family filter by default; WSL/msys2/Windows path translation in dir finder | M3 | idea |
 | F-022 | Leader key inside the finder, only if clashes pile up | ? | idea |
+| F-023 | Drop-in `cd` like `zoxide --cmd cd`: a real path → Set-Location, otherwise jump to the best frecency match; `cdi` interactive. Replaces zoxide (and ZLocation) | M2 | idea |
