@@ -19,6 +19,8 @@ const usage = `usage: hit <command>
 commands:
   init pwsh   print the PowerShell integration; in $PROFILE:
                 Invoke-Expression (& hit init pwsh | Out-String)
+  path <data|history|config>
+              print a resolved path (honours HIT_DATA_DIR / HIT_CONFIG)
   version     print the version`
 
 func main() {
@@ -38,6 +40,8 @@ func run(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 0
 	case "init":
 		return runInit(args[1:], env, stdout, stderr)
+	case "path":
+		return runPath(args[1:], env, stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprintln(stdout, usage)
 		return 0
@@ -64,5 +68,28 @@ func runInit(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}
+	return 0
+}
+
+func runPath(args []string, env paths.Env, stdout, stderr io.Writer) int {
+	resolve := map[string]func(paths.Env) (string, error){
+		"data":    paths.DataDir,
+		"history": paths.History,
+		"config":  paths.ConfigFile,
+	}
+	var f func(paths.Env) (string, error)
+	if len(args) == 1 {
+		f = resolve[args[0]]
+	}
+	if f == nil {
+		fmt.Fprintln(stderr, "usage: hit path <data|history|config>")
+		return 2
+	}
+	p, err := f(env)
+	if err != nil {
+		fmt.Fprintln(stderr, "hit:", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, p)
 	return 0
 }

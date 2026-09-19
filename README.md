@@ -11,6 +11,21 @@ PowerShell and zsh.
 
 Needs Go and PowerShell 7 with Pester 5+. `./scripts/test.ps1` runs what CI runs.
 
+Try it (PowerShell 7):
+
+```powershell
+./scripts/install.ps1          # go install, version stamped from git
+./scripts/install.ps1 -Clear   # same, and start with an empty history (old file moved to backup\)
+```
+
+Then add this as the last line of `$PROFILE` and open a new terminal:
+
+```powershell
+Invoke-Expression (& hit init pwsh | Out-String)
+```
+
+`hit path history` shows where history is kept. `Disable-Hit` stops recording in the current session.
+
 ## Why another history tool?
 
 - **Multi-line commands are first class.** A 4-line `Invoke-RestMethod` to Elasticsearch comes

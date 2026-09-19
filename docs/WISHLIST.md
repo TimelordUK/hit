@@ -40,6 +40,8 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | doing |
 | C-024 | Multi-process append + compact stress test | M1 | planned |
 | C-025 | `hit import zoxide` (`zoxide query --list --score`) so directory ranking carries over | M2 | idea |
+| C-026 | Learn from finder picks: record what was chosen (new record kind, schema first) and weight it in ranking, so the commands you actually reach for float up | ? | idea |
+| C-027 | `hit path data\|history\|config`: print resolved paths for scripts and `hit doctor` | M1 | done |
 
 ## Shell
 
@@ -66,6 +68,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-019 | `Invoke-HitSelfTest`: run formatter/round-trip checks over the owner's real history, locally only | M1 | idea |
 | S-020 | C# `ICommandPredictor` plugin reading hit's history for PSReadLine predictions | later | idea |
 | S-021 | `h` / `hit` command opens the finder as a no-key fallback | M1 | planned |
+| S-022 | `scripts/install.ps1`: build + install with version stamped; `-Clear` moves the current history into `backup\` (dogfooding: start clean each reinstall) | M1 | done |
 
 ## Features / UX
 
@@ -94,3 +97,5 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-021 | Shell-family filter by default; WSL/msys2/Windows path translation in dir finder | M3 | idea |
 | F-022 | Leader key inside the finder, only if clashes pile up | ? | idea |
 | F-023 | Drop-in `cd` like `zoxide --cmd cd`: a real path → Set-Location, otherwise jump to the best frecency match; `cdi` interactive. Replaces zoxide (and ZLocation) | M2 | idea |
+| F-024 | Retrospective lock: mark a command in the finder as guarded, so sending it (or a match) again asks for confirmation first. Per-command guards built on F-010/C-013 | M2 | idea |
+| F-025 | navi-style expansion: a short alias expands in place at the prompt into a stored (multi-line) command, with placeholders to fill in. Aliases in config or as tagged history entries (F-014) | later | idea |
