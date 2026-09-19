@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TimelordUK/hit/schema/record.schema.json",
+  "title": "hit history record",
+  "description": "One line of history.jsonl as written by any hit writer (Go core, pwsh, zsh). Readers are more lenient than this: they ignore unknown keys and kinds. Writers must match this schema; a new key or kind is added here first. See docs/DESIGN.md §4.2.",
+  "type": "object",
+  "required": ["k"],
+  "additionalProperties": false,
+  "properties": {
+    "k":    { "enum": ["cmd", "end", "cd", "del"] },
+    "id":   { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "ULID" },
+    "ts":   { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$", "description": "UTC, millisecond precision" },
+    "cmd":  { "type": "string", "minLength": 1, "description": "The command exactly as typed" },
+    "cwd":  { "type": "string", "minLength": 1 },
+    "dir":  { "type": "string", "minLength": 1 },
+    "sh":   { "type": "string", "minLength": 1, "examples": ["pwsh", "zsh"] },
+    "host": { "type": "string", "minLength": 1 },
+    "sid":  { "type": "string", "minLength": 1 },
+    "src":  { "type": "string", "minLength": 1, "examples": ["psreadline", "mcfly", "zsh", "atuin"] },
+    "exit": { "type": "integer" },
+    "ms":   { "type": "integer", "minimum": 0 }
+  },
+  "allOf": [
+    {
+      "if":   { "properties": { "k": { "const": "cmd" } } },
+      "then": { "required": ["id", "ts", "cmd", "sh"], "not": { "anyOf": [ { "required": ["dir"] }, { "required": ["exit"] }, { "required": ["ms"] } ] } }
+    },
+    {
+      "if":   { "properties": { "k": { "const": "end" } } },
+      "then": { "required": ["id"], "propertyNames": { "enum": ["k", "id", "exit", "ms"] } }
+    },
+    {
+      "if":   { "properties": { "k": { "const": "cd" } } },
+      "then": { "required": ["ts", "dir"], "propertyNames": { "enum": ["k", "ts", "dir", "sh", "host", "sid"] } }
+    },
+    {
+      "if":   { "properties": { "k": { "const": "del" } } },
+      "then": { "required": ["id", "ts"], "propertyNames": { "enum": ["k", "id", "ts"] } }
+    }
+  ]
+}

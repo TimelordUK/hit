@@ -102,6 +102,10 @@ round-trip exactly. Short keys keep the file compact.
   the file without them (and without their `end` records). Compaction also runs opportunistically.
 - **Reader is tolerant.** Unknown keys are ignored; a torn/corrupt line is skipped, never fatal.
 - Unknown `k` values are ignored, so new record kinds can be added without breaking old readers.
+- **Writers are stricter than readers.** Every writer (Go, pwsh, zsh) must produce records
+  matching [`schema/record.schema.json`](../schema/record.schema.json). A new key or kind goes
+  into the schema first. `internal/contract` runs each shell's writer over the shared cases in
+  `testdata/contract/cases.json` and checks the Go reader gets back exactly the same record.
 
 ### 4.3 Concurrency
 

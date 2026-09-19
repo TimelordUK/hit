@@ -1,0 +1,62 @@
+[
+  {
+    "name": "multi-line elastic call, LF",
+    "record": {
+      "k": "cmd", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC", "ts": "2026-09-19T10:12:03.412Z",
+      "cmd": "Invoke-RestMethod `\n    -Uri https://elastic-prod-1:9200/logs-*/_search `\n    -Method Post `\n    -Body '{\"query\":{\"match_all\":{}}}'",
+      "cwd": "\\\\elastic-prod-1\\logs", "sh": "pwsh", "host": "box1", "sid": "a1b2c3"
+    }
+  },
+  {
+    "name": "multi-line with CRLF and a here-string",
+    "record": {
+      "k": "cmd", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZD", "ts": "2026-09-19T10:12:04.000Z",
+      "cmd": "$body = @\"\r\n{ \"size\": 0 }\r\n\"@\r\nirm -Uri $u -Body $body",
+      "cwd": "C:\\dev\\hit", "sh": "pwsh", "host": "box1", "sid": "a1b2c3"
+    }
+  },
+  {
+    "name": "quotes, backslashes, subexpressions, shell operators",
+    "record": {
+      "k": "cmd", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZE", "ts": "2026-09-19T10:12:05.999Z",
+      "cmd": "gci 'C:\\Program Files\\*' | ? { $_.Name -like \"*x*\" } > out.txt 2>&1 && echo \"$($env:USERNAME) <done> & 'ok'\"",
+      "cwd": "C:\\", "sh": "pwsh", "host": "box1", "sid": "a1b2c3"
+    }
+  },
+  {
+    "name": "unicode, emoji, tabs, escape sequences, line/paragraph separators",
+    "record": {
+      "k": "cmd", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZF", "ts": "2026-09-19T10:12:06.000Z",
+      "cmd": "Write-Host \"caf\u00e9 \ud83e\udd80 \u2713\t\u001b[31mred\u001b[0m \u2028 \u2029 \u00a0\"",
+      "cwd": "D:\\Donn\u00e9es", "sh": "pwsh", "host": "box1", "sid": "a1b2c3"
+    }
+  },
+  {
+    "name": "non-filesystem provider cwd",
+    "record": {
+      "k": "cmd", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZG", "ts": "2026-09-19T10:12:07.000Z",
+      "cmd": "gci", "cwd": "Microsoft.PowerShell.Core\\Registry::HKEY_LOCAL_MACHINE\\SOFTWARE", "sh": "pwsh", "host": "box1", "sid": "a1b2c3"
+    }
+  },
+  {
+    "name": "end: success, zero duration",
+    "record": { "k": "end", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC", "exit": 0, "ms": 0 }
+  },
+  {
+    "name": "end: Ctrl+C exit code, long duration",
+    "record": { "k": "end", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZD", "exit": -1073741510, "ms": 9876543210 }
+  },
+  {
+    "name": "cd to a UNC share",
+    "record": { "k": "cd", "ts": "2026-09-19T10:12:08.000Z", "dir": "\\\\elastic-prod-1\\logs\\2026", "sh": "pwsh", "host": "box1", "sid": "a1b2c3" }
+  },
+  {
+    "name": "del",
+    "record": { "k": "del", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZE", "ts": "2026-09-19T10:12:09.000Z" }
+  },
+  {
+    "name": "writer generates id and ts from HIT_NOW",
+    "generate": true,
+    "record": { "k": "cmd", "cmd": "ls", "cwd": "C:\\dev", "sh": "pwsh", "host": "box1", "sid": "a1b2c3" }
+  }
+]
