@@ -12,7 +12,7 @@ import (
 // Styles are resolved once. NO_COLOR (and a dumb terminal) fall back to plain text;
 // lipgloss itself degrades to 16 colours where that's all there is.
 type styles struct {
-	header, scope, match, selected, meta, marker, dim, sep lipgloss.Style
+	header, scope, match, selected, meta, marker, dim, sep, cursor lipgloss.Style
 }
 
 func newStyles() styles {
@@ -20,7 +20,7 @@ func newStyles() styles {
 		plain := lipgloss.NewStyle()
 		bold := lipgloss.NewStyle().Bold(true)
 		return styles{header: bold, scope: plain, match: bold, selected: lipgloss.NewStyle().Reverse(true),
-			meta: plain, marker: plain, dim: plain, sep: plain}
+			meta: plain, marker: plain, dim: plain, sep: plain, cursor: lipgloss.NewStyle().Reverse(true)}
 	}
 	return styles{
 		header:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
@@ -31,6 +31,7 @@ func newStyles() styles {
 		marker:   lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
 		dim:      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 		sep:      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		cursor:   lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	}
 }
 
@@ -45,13 +46,27 @@ func (m Model) View() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(s.header.Render("hit") + " " + m.query.Text + s.dim.Render("▏") + "  " +
-		s.scope.Render("["+string(m.query.Scope)+"]"))
+	// The search line: a prompt, what you've typed, a cursor, and how many commands match,
+	// so it is obvious that typing filters.
+	left := s.header.Render("hit ❯ ") + m.query.Text + s.cursor.Render("▏")
+	right := fmt.Sprintf("%d", len(m.results))
+	if len(m.results) == 1 {
+		right += " match"
+	} else {
+		right += " matches"
+	}
+	right += "  " + string(m.query.Scope)
 	if m.query.HideFailed {
-		b.WriteString(s.dim.Render("  ok-only"))
+		right += "  ok-only"
 	}
 	if len(m.order) > 0 {
-		b.WriteString(s.dim.Render(fmt.Sprintf("  %d deleted", len(m.order))))
+		right += fmt.Sprintf("  %d deleted", len(m.order))
+	}
+	right = s.scope.Render(right)
+	if gap := m.width - lipgloss.Width(left) - lipgloss.Width(right); gap > 1 {
+		b.WriteString(left + strings.Repeat(" ", gap) + right)
+	} else {
+		b.WriteString(truncate(left, m.width))
 	}
 	b.WriteString("\n")
 

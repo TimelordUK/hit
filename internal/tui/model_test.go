@@ -224,6 +224,29 @@ func TestViewShowsMultiLineMarkerAndPreview(t *testing.T) {
 	}
 }
 
+// The search line has to make it obvious that typing filters.
+func TestViewShowsTheQueryAndLiveMatchCount(t *testing.T) {
+	m := testModel(t)
+	var tm tea.Model = m
+	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = tm.(Model)
+
+	if v := m.View(); !strings.Contains(v, "hit ❯ ") || !strings.Contains(v, "4 matches") {
+		t.Errorf("empty query:\n%s", v)
+	}
+	m = send(m, "git")
+	v := m.View()
+	if !strings.Contains(v, "hit ❯ git") {
+		t.Errorf("typed text not shown:\n%s", v)
+	}
+	if !strings.Contains(v, "2 matches") {
+		t.Errorf("match count did not follow the filter:\n%s", v)
+	}
+	if m = send(m, " stash"); !strings.Contains(m.View(), "1 match ") {
+		t.Errorf("singular match count:\n%s", m.View())
+	}
+}
+
 func TestViewFitsSmallPanes(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{80, 24}, {40, 12}, {30, 8}, {20, 5}} {
 		m := testModel(t)
