@@ -17,10 +17,10 @@ Every idea goes here, however wild. We refine them by using the tool.
 |---|---|---|---|
 | C-001 | JSONL store: tolerant reader, record kinds `cmd`/`end`/`cd`/`del`, merge by id | M1 | done |
 | C-002 | ULID ids; data/config dir resolution with env overrides | M1 | done |
-| C-003 | Tombstone deletion (`hit rm <id>`), hidden immediately | M1 | planned |
+| C-003 | Tombstone deletion (Del in the finder done; `hit rm <id>` still to do), hidden immediately | M1 | doing |
 | C-004 | `hit compact`: lock, rewrite, catch late appends, atomic swap; many-shell stress test | M1 | planned |
-| C-005 | Fuzzy match + ranking (match × recency × frequency × same-dir × success) | M1 | planned |
-| C-006 | Duplicate collapse with run count / last run | M1 | planned |
+| C-005 | Fuzzy match + ranking (match × recency × frequency × same-dir × success) | M1 | done |
+| C-006 | Duplicate collapse with run count / last run | M1 | done |
 | C-007 | `hit import psreadline` (backtick-continued multi-line entries) | M1 | planned |
 | C-008 | `hit import mcfly` (SQLite, import-only dependency). mcfly redirects PSReadLine's history file to a temp file, so its DB holds the recent history | M1 | planned |
 | C-009 | `hit import zsh` (EXTENDED_HISTORY) and `hit import atuin` | M3 | idea |
@@ -33,9 +33,9 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-016 | `hit stats`: most-used commands, dirs, failure rates | later | idea |
 | C-017 | Export / query-friendly view for `sql-cli` (flattened cmd+end rows as CSV/JSONL) | later | idea |
 | C-018 | Test hooks: `HIT_DATA_DIR`/`HIT_CONFIG` isolation, injected clock + id source, `HIT_NOW` | M1 | done |
-| C-019 | `hit search --filter … --print` (non-interactive, same ranking) | M1 | planned |
+| C-019 | `hit search --filter … --print` (non-interactive, same ranking) | M1 | done |
 | C-020 | Fuzz tests: reader tolerance + byte-exact round-trip of any command string | M1 | done |
-| C-021 | Golden tests for search/ranking under `testdata/` with `-update` | M1 | planned |
+| C-021 | Golden tests for search/ranking under `testdata/` with `-update` | M1 | done |
 | C-022 | JSON Schema for records + result handoff in `schema/`; shared fixtures for all writers | M1 | doing |
 | C-023 | CI: GitHub Actions windows + ubuntu: go vet/test/short fuzz, Pester, zsh tests, e2e smoke | M1 | doing |
 | C-024 | Multi-process append + compact stress test | M1 | planned |
@@ -49,7 +49,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 |---|---|---|---|
 | S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | done |
 | S-002 | pwsh: prompt wrapper writes `end` (exit, duration) and `cd` records | M1 | done |
-| S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result. Must work in vi insert mode (owner uses `-EditMode vi`) | M1 | planned |
+| S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result. Must work in vi insert mode (owner uses `-EditMode vi`) | M1 | done |
 | S-004 | pwsh: `Format-HitCommand` tidy via the PowerShell parser, with a token-equality check | M1 | planned |
 | S-005 | pwsh: store `$PWD.ProviderPath` (clean UNC), handle non-FS providers | M1 | done |
 | S-006 | pwsh: leading-space = don't record | M1 | done |
@@ -74,11 +74,11 @@ Every idea goes here, however wild. We refine them by using the tool.
 
 | ID | Item | MS | Status |
 |---|---|---|---|
-| F-001 | Finder TUI: fuzzy list, multi-line preview pane with `⏎ +N` markers | M1 | planned |
-| F-002 | Del in finder = delete (with undo while open) | M1 | planned |
+| F-001 | Finder TUI: fuzzy list, multi-line preview pane with `⏎ +N` markers | M1 | done |
+| F-002 | Del in finder = delete (with undo while open) | M1 | done |
 | F-003 | Ctrl+E: edit selection in `$EDITOR`, return to prompt | M1 | planned |
-| F-004 | Ctrl+R (again, inside the finder) scope cycle: dir → session → host → all | M1 | planned |
-| F-005 | Hide failed commands toggle; show exit code / duration / cwd in preview | M1 | idea |
+| F-004 | Ctrl+R (again, inside the finder) scope cycle: dir → session → host → all | M1 | done |
+| F-005 | Hide failed toggle (done); exit code / duration / cwd in preview (done); richer filters to come | M1 | doing |
 | F-006 | Ctrl+F toggle "as typed" / "tidied"; decide format-on-demand vs pre-computed `fmt` | M1 | idea |
 | F-007 | Syntax highlighting in the preview (pwsh and zsh) | later | idea |
 | F-008 | Directory finder: frecency, never stats remote paths, explicit existence check on jump | M2 | planned |
@@ -93,7 +93,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-017 | Guard conditions on time/day (extra-strict before 10:00 on a Monday) | later | idea |
 | F-018 | Keymap from `config.toml`, no hard-coded keys | M1 | planned |
 | F-019 | `hit doctor`: detect Zellij/tmux/WT/WSL/msys2, report key clashes and setup problems | M2 | idea |
-| F-020 | Inline vs full-screen mode; layout adapts to pane size (side/below/hidden preview) | M1 | idea |
+| F-020 | Inline vs full-screen mode (still full-screen); layout adapts to pane size (done) | M1 | doing |
 | F-021 | Shell-family filter by default; WSL/msys2/Windows path translation in dir finder | M3 | idea |
 | F-022 | Leader key inside the finder, only if clashes pile up | ? | idea |
 | F-023 | Drop-in `cd` like `zoxide --cmd cd`: a real path → Set-Location, otherwise jump to the best frecency match; `cdi` interactive. Replaces zoxide (and ZLocation) | M2 | idea |

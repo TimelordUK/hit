@@ -21,6 +21,7 @@ commands:
                 Invoke-Expression (& hit init pwsh | Out-String)
   path <data|history|config>
               print a resolved path (honours HIT_DATA_DIR / HIT_CONFIG)
+  search      open the finder (used by the Ctrl+R handler)
   version     print the version`
 
 func main() {
@@ -40,6 +41,8 @@ func run(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 0
 	case "init":
 		return runInit(args[1:], env, stdout, stderr)
+	case "search":
+		return runSearch(args[1:], env, stdout, stderr)
 	case "path":
 		return runPath(args[1:], env, stdout, stderr)
 	case "help", "--help", "-h":

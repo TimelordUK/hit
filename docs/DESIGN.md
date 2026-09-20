@@ -178,31 +178,43 @@ redacted or not recorded at all, before they touch disk. See §9 for how rules r
 
 ## 6. Search (the finder)
 
-Spawned by a key handler: `hit search --query "<current buffer>" --out <tmpfile>`.
-The TUI draws on the console, and the chosen command is written to the temp file; the key handler
-reads it and replaces the prompt buffer. (Using a temp file rather than stdout keeps the TUI's
-terminal I/O clean on Windows.)
+Spawned by the Ctrl+R key handler:
+`hit search --query "<buffer>" --out <tmpfile> --scope <scope> --cwd <pwd> --session <sid>
+--host <host> --shell pwsh`. The TUI draws on the alternate screen **on stderr**, and the
+choice is written to the temp file as JSON, so the shell's capture of stdout never disturbs
+the display:
 
-**Default keys** (all configurable, all subject to change by use; chosen to avoid the Zellij,
-tmux, Windows Terminal and PSReadLine defaults, see §14):
+```jsonc
+{"action":"insert","cmd":"Invoke-RestMethod `\n  -Uri …","id":"01J8Z…","deleted":["01J8Y…"]}
+```
+
+`action` is `insert`, `edit` or `cancel`; `deleted` lists ids the finder tombstoned. The key
+handler reads the file through a line-editor adapter (`GetBuffer`/`SetBuffer`/`Redraw`) that
+tests replace with a fake, so handlers run with no keyboard (DESIGN §13.1).
+
+`hit search --print` runs the same ranking with no TUI and prints one JSON object per result
+(C-019): for tests, scripts, and piping into fzf.
+
+**Keys as built** (all still provisional, to be moved into `config.toml` by F-018):
 
 | Key | Action |
 |---|---|
-| Ctrl+R (from prompt) | open finder, seeded with current buffer |
-| Ctrl+R (in finder) | cycle scope: this directory → this session → this host → everything |
-| type | fuzzy filter |
-| ↑/↓ | move (Ctrl+P/N are **not** defaults: Zellij owns them) |
-| Enter | put command in the prompt (don't run) |
-| Tab | put command in the prompt and keep editing |
-| Ctrl+E | open in `$EDITOR`, result goes back to the prompt |
-| Ctrl+F | toggle "as typed" / "tidied" view of the selection (§7) |
-| Del | delete from history (tombstone), with undo while finder is open |
-| Ctrl+X | toggle "hide failed commands" |
-| F1 / `?` on an empty query | key help overlay |
-| Esc | cancel, prompt untouched |
+| Ctrl+R (prompt) | open the finder, seeded with the current buffer; bound in both vi modes |
+| Ctrl+R (finder) | cycle scope: dir → session → host → all |
+| type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
+| ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
+| Enter | put the command in the prompt, don't run it |
+| Tab | put it in the prompt (`edit`) |
+| Ctrl+X | hide/show commands that failed |
+| Del / Ctrl+Z | tombstone the selection / undo, while the finder is open |
+| Esc / Ctrl+C | cancel, prompt untouched |
 
-Zellij takes most Ctrl/Alt letters, so every default here is provisional until `hit doctor`
-(F-019) checks it against the real environment.
+**Ranking** (`internal/search`, golden-tested): match quality × frequency (log, so a command
+run 500 times doesn't bury one run twice) × recency (halves every 7 days, with a floor) ×
+bonuses for this directory (1.5), this session (1.2) and a penalty for a failed exit (0.7).
+Matching is smart-case subsequence, scored on contiguity, word boundaries, span and how
+early it starts. Duplicates collapse into one result with a run count; the directory and
+session bonuses look at every run of that command, not just the latest.
 
 - **Multi-line is first class**: the list shows the first line with a `⏎ +3` marker, and a
   preview pane shows the full command, syntax-highlighted.

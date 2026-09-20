@@ -252,6 +252,7 @@ function Enable-Hit {
     $script:HitLastDir = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
     Register-HitHistoryHandler
     Register-HitPrompt
+    Register-HitKeyHandlers
 }
 
 # Stops recording and puts back the handler and prompt hit wrapped.
@@ -269,4 +270,103 @@ function Disable-Hit {
     $script:HitHandler = $null
     $script:HitPromptWrapper = $null
     $script:HitPending = $null
+    if ($script:HitKeysBound) { Remove-HitKeyHandlers }
+}
+
+# ---------------------------------------------------------------------------------------
+# The finder (S-003). The Ctrl+R handler is a thin binding: it reads the prompt buffer
+# through an adapter, runs `hit search`, and puts the result back. Tests replace the
+# adapter and the runner, so handlers can be exercised with no keyboard and no binary.
+# ---------------------------------------------------------------------------------------
+
+$script:HitKeysBound = $false
+
+# Line editor adapter (S-015). Every call into PSReadLine goes through this.
+$script:HitEditor = @{
+    GetBuffer = {
+        $line = $null; $cursor = $null
+        [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+        $line
+    }
+    SetBuffer = {
+        param([string]$Text)
+        [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($Text)
+    }
+    Redraw    = { [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() }
+}
+
+# Runs the binary. Replaced in tests by one that writes a canned choice.
+$script:HitRunner = {
+    param([string[]]$Arguments)
+    $null = & $script:HitExe @Arguments   # the TUI draws on stderr; stdout stays clean
+    $LASTEXITCODE
+}
+
+# Builds the argument list for `hit search`. Pure, so tests can check it.
+function New-HitSearchArguments {
+    param([string]$Query, [string]$OutFile, [string]$Scope = 'all')
+    @(
+        'search'
+        '--query', $Query
+        '--out', $OutFile
+        '--scope', $Scope
+        '--cwd', (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+        '--session', $script:HitSessionId
+        '--host', $script:HitHostName
+        '--shell', 'pwsh'
+    )
+}
+
+# Ctrl+R: open the finder seeded with what's already typed, then replace the buffer with
+# whatever comes back. Esc in the finder leaves the prompt untouched.
+function Invoke-HitFinder {
+    $out = [System.IO.Path]::GetTempFileName()
+    try {
+        $query = & $script:HitEditor.GetBuffer
+        $code = & $script:HitRunner (New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope)
+        if ($code -ne 0) { return }
+        $choice = $null
+        if (Test-Path -LiteralPath $out) {
+            $text = [System.IO.File]::ReadAllText($out)
+            if ($text.Trim()) { $choice = ConvertFrom-Json $text }
+        }
+        if ($choice -and $choice.action -in @('insert', 'edit') -and $choice.cmd) {
+            & $script:HitEditor.SetBuffer $choice.cmd
+        }
+    } catch {
+        # Principle 7: a broken finder must never break the prompt.
+    } finally {
+        Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
+        & $script:HitEditor.Redraw
+    }
+}
+
+$script:HitScope = 'all'
+
+# Binds Ctrl+R. In vi edit mode a chord must be bound per vi mode, and the owner uses
+# `Set-PSReadLineOption -EditMode vi`, so bind insert and command mode too (DESIGN §14.1).
+function Register-HitKeyHandlers {
+    $common = @{ ScriptBlock = { Invoke-HitFinder }; BriefDescription = 'HitFinder'
+        Description = 'Search hit history'
+    }
+    if ((Get-PSReadLineOption).EditMode -eq 'Vi') {
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Insert @common
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Command @common
+    } else {
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' @common
+    }
+    $script:HitKeysBound = $true
+}
+
+# Puts Ctrl+R back to PSReadLine's own reverse search.
+function Remove-HitKeyHandlers {
+    $common = @{ Function = 'ReverseSearchHistory' }
+    if ((Get-PSReadLineOption).EditMode -eq 'Vi') {
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Insert @common
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Command @common
+    } else {
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' @common
+    }
+    $script:HitKeysBound = $false
 }
