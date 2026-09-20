@@ -376,26 +376,190 @@ $script:HitScope = 'all'
 # Binds Ctrl+R. In vi edit mode a chord must be bound per vi mode, and the owner uses
 # `Set-PSReadLineOption -EditMode vi`, so bind insert and command mode too (DESIGN §14.1).
 function Register-HitKeyHandlers {
-    $common = @{ ScriptBlock = { Invoke-HitFinder }; BriefDescription = 'HitFinder'
+    $finder = @{ ScriptBlock = { Invoke-HitFinder }; BriefDescription = 'HitFinder'
         Description = 'Search hit history'
     }
-    if ((Get-PSReadLineOption).EditMode -eq 'Vi') {
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Insert @common
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Command @common
-    } else {
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' @common
+    # Alt+M: neither Zellij, Windows Terminal nor PSReadLine claims it (DESIGN §14.1).
+    $toggle = @{ ScriptBlock = { Invoke-HitToggleMultiline }; BriefDescription = 'HitToggleMultiline'
+        Description = 'Split a command over lines, or join it back onto one'
     }
+    Set-HitKeyHandler -Chord 'Ctrl+r' -Options $finder
+    Set-HitKeyHandler -Chord 'Alt+m' -Options $toggle
     $script:HitKeysBound = $true
 }
 
-# Puts Ctrl+R back to PSReadLine's own reverse search.
-function Remove-HitKeyHandlers {
-    $common = @{ Function = 'ReverseSearchHistory' }
+# Binds a chord, covering both vi modes when vi editing is on.
+function Set-HitKeyHandler {
+    param([Parameter(Mandatory)][string]$Chord, [Parameter(Mandatory)][hashtable]$Options)
     if ((Get-PSReadLineOption).EditMode -eq 'Vi') {
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Insert @common
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ViMode Command @common
+        Set-PSReadLineKeyHandler -Chord $Chord -ViMode Insert @Options
+        Set-PSReadLineKeyHandler -Chord $Chord -ViMode Command @Options
     } else {
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' @common
+        Set-PSReadLineKeyHandler -Chord $Chord @Options
     }
+}
+
+# Puts Ctrl+R back to PSReadLine's own reverse search and drops Alt+M.
+function Remove-HitKeyHandlers {
+    Set-HitKeyHandler -Chord 'Ctrl+r' -Options @{ Function = 'ReverseSearchHistory' }
+    Set-HitKeyHandler -Chord 'Alt+m' -Options @{ Function = 'SelfInsert' }
     $script:HitKeysBound = $false
+}
+
+# ---------------------------------------------------------------------------------------
+# One line ↔ many lines (S-004). Both directions go through PowerShell's own parser and are
+# checked by re-parsing the result: if the token stream differs in any way, the original is
+# returned untouched. Worst case is "not reformatted", never "broken" (DESIGN §7).
+# The stored history record is never changed: this only rewrites the prompt buffer.
+# ---------------------------------------------------------------------------------------
+
+$script:HitLF = [string][char]10
+$script:HitBacktick = [string][char]96
+
+# Tokens that open and close a nesting level. Only breaks at depth 0 are made, so
+# parameters inside { }, ( ), @{ }, $( ) and [ ] stay where they are.
+$script:HitOpenKinds = @('LParen', 'LCurly', 'LBracket', 'AtParen', 'AtCurly', 'DollarParen')
+$script:HitCloseKinds = @('RParen', 'RCurly', 'RBracket')
+
+function Get-HitTokens([string]$Command, [ref]$Errors) {
+    $tokens = $null
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$parseErrors)
+    $Errors.Value = $parseErrors
+    $tokens
+}
+
+# The signature used to prove a rewrite changed nothing but layout: every token's kind and
+# text, ignoring newlines and line continuations.
+function Get-HitTokenSignature([string]$Command) {
+    $errors = $null
+    $tokens = Get-HitTokens $Command ([ref]$errors)
+    if ($errors.Count) { return $null }
+    ($tokens |
+        Where-Object { $_.Kind -notin @('NewLine', 'LineContinuation', 'EndOfInput') } |
+        ForEach-Object { $_.Kind.ToString() + ':' + $_.Text }) -join [string][char]31
+}
+
+# $true when $Rewritten is the same command as $Original, laid out differently.
+function Test-HitSameCommand([string]$Original, [string]$Rewritten) {
+    $a = Get-HitTokenSignature $Original
+    $b = Get-HitTokenSignature $Rewritten
+    $null -ne $a -and $a -eq $b
+}
+
+# Splits a single-line command at its top-level parameters and pipes:
+#   irm -Uri x -Method Post | select -First 2
+# becomes
+#   irm `
+#       -Uri x `
+#       -Method Post |
+#       select -First 2
+function Format-HitCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Command,
+        [string]$Indent = '    '
+    )
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $Command }
+    if ($Command -match '[\r\n]') { return $Command }  # already multi-line
+
+    $errors = $null
+    $tokens = Get-HitTokens $Command ([ref]$errors)
+    if ($errors.Count) { return $Command }
+
+    # Pipeline stages line up under each other; a stage's parameters sit one level deeper.
+    $breaks = [System.Collections.Generic.List[object]]::new()
+    $depth = 0
+    $stage = 0
+    for ($i = 0; $i -lt $tokens.Count; $i++) {
+        $t = $tokens[$i]
+        if ($t.Kind -in $script:HitOpenKinds) { $depth++; continue }
+        if ($t.Kind -in $script:HitCloseKinds) { $depth--; continue }
+        if ($depth -ne 0) { continue }
+        if ($t.Kind -eq 'Parameter' -and $i -gt 0) {
+            $level = if ($stage -eq 0) { 1 } else { 2 }
+            $breaks.Add([pscustomobject]@{ Offset = $t.Extent.StartOffset; AfterPipe = $false; Level = $level })
+        } elseif ($t.Kind -eq 'Pipe') {
+            $stage++
+            $breaks.Add([pscustomobject]@{ Offset = $t.Extent.EndOffset; AfterPipe = $true; Level = 1 })
+        }
+    }
+    if ($breaks.Count -eq 0) { return $Command }
+
+    $sb = [System.Text.StringBuilder]::new()
+    $pos = 0
+    foreach ($b in $breaks) {
+        $chunk = $Command.Substring($pos, $b.Offset - $pos)
+        if ($pos -gt 0) { $chunk = $chunk.TrimStart() }  # the indent replaces it
+        $pad = $Indent * $b.Level
+        if ($b.AfterPipe) {
+            # A trailing pipe continues the line by itself: no backtick needed.
+            $null = $sb.Append($chunk.TrimEnd()).Append($script:HitLF).Append($pad)
+        } else {
+            $null = $sb.Append($chunk.TrimEnd()).Append(' ').Append($script:HitBacktick).
+                Append($script:HitLF).Append($pad)
+        }
+        $pos = $b.Offset
+    }
+    $null = $sb.Append($Command.Substring($pos).TrimStart())
+    $result = $sb.ToString()
+
+    if (-not (Test-HitSameCommand $Command $result)) { return $Command }
+    $result
+}
+
+# The reverse: brings a continued command back onto one line for editing.
+function Join-HitCommand {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Command)
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $Command }
+    if ($Command -notmatch '[\r\n]') { return $Command }  # already one line
+
+    $errors = $null
+    $tokens = Get-HitTokens $Command ([ref]$errors)
+    if ($errors.Count) { return $Command }
+
+    # A here-string or a multi-line string owns its newlines: joining would change the
+    # command's meaning, so leave it alone.
+    foreach ($t in $tokens) {
+        if ($t.Kind -notin @('NewLine', 'LineContinuation') -and $t.Text -match '[\r\n]') { return $Command }
+    }
+
+    $sb = [System.Text.StringBuilder]::new()
+    $pos = 0
+    $pendingSpace = $false
+    foreach ($t in $tokens) {
+        if ($t.Kind -eq 'EndOfInput') { break }
+        if ($t.Kind -in @('NewLine', 'LineContinuation')) {
+            $pendingSpace = $true
+            $pos = $t.Extent.EndOffset
+            continue
+        }
+        $gap = $Command.Substring($pos, $t.Extent.StartOffset - $pos)
+        if ($pendingSpace -or $gap -match '[\r\n]') {
+            if ($sb.Length -gt 0) { $null = $sb.Append(' ') }
+        } elseif ($gap) {
+            $null = $sb.Append($gap)
+        }
+        $null = $sb.Append($t.Text)
+        $pendingSpace = $false
+        $pos = $t.Extent.EndOffset
+    }
+    $result = $sb.ToString().Trim()
+
+    if (-not (Test-HitSameCommand $Command $result)) { return $Command }
+    $result
+}
+
+# Alt+M: one line ↔ many lines, whichever way the buffer isn't.
+function Invoke-HitToggleMultiline {
+    try {
+        $buffer = & $script:HitEditor.GetBuffer
+        if ([string]::IsNullOrWhiteSpace($buffer)) { return }
+        $result = if ($buffer -match '[\r\n]') { Join-HitCommand $buffer } else { Format-HitCommand $buffer }
+        if ($result -ne $buffer) { & $script:HitEditor.SetBuffer $result }
+        else { Write-HitDebug "toggle: unchanged (parse error, nothing to split, or not safe)" }
+    } catch {
+        Write-HitDebug ("toggle error: " + ($_ | Out-String))
+    }
 }

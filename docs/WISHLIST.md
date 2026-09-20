@@ -50,7 +50,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-001 | pwsh: record hook via `AddToHistoryHandler`, in-process append, no process spawn | M1 | done |
 | S-002 | pwsh: prompt wrapper writes `end` (exit, duration) and `cd` records | M1 | done |
 | S-003 | pwsh: Ctrl+R handler → `hit search` → replace buffer with the (multi-line) result. Must work in vi insert mode (owner uses `-EditMode vi`) | M1 | done |
-| S-004 | pwsh: `Format-HitCommand` tidy via the PowerShell parser, with a token-equality check | M1 | planned |
+| S-004 | pwsh: `Format-HitCommand` tidy via the PowerShell parser, with a token-equality check | M1 | done |
 | S-005 | pwsh: store `$PWD.ProviderPath` (clean UNC), handle non-FS providers | M1 | done |
 | S-006 | pwsh: leading-space = don't record | M1 | done |
 | S-007 | pwsh: Enter guard (re-bind AcceptLine) for prod rules | M2 | idea |
@@ -62,12 +62,13 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-013 | zsh: `accept-line` guard wrapper | M3 | idea |
 | S-014 | pwsh on Linux: verify everything works as on Windows | M3 | idea |
 | S-015 | pwsh: Pester 5 suite; line-editor adapter (Get/Replace/Accept) so handlers run against a fake | M1 | doing |
-| S-016 | pwsh: formatter corpus `tests/corpus/pwsh/` (expected output + token-equality) | M1 | planned |
+| S-016 | pwsh: formatter corpus `tests/corpus/pwsh/` (expected output + token-equality) | M1 | done |
 | S-017 | e2e smoke via pty/ConPTY: real shell + module, type multi-line, assert record; Ctrl+R recall | M1 | planned |
 | S-018 | zsh: test harness (`zsh -f`, fake BUFFER) | M3 | planned |
 | S-019 | `Invoke-HitSelfTest`: run formatter/round-trip checks over the owner's real history, locally only | M1 | idea |
 | S-020 | C# `ICommandPredictor` plugin reading hit's history for PSReadLine predictions | later | idea |
 | S-021 | `h` / `hit` command opens the finder as a no-key fallback | M1 | planned |
+| S-023 | pwsh: `Join-HitCommand` + Alt+M toggle: split a one-liner at top-level parameters/pipes, or bring a continued command back onto one line for editing | M1 | done |
 | S-022 | `scripts/install.ps1`: build + install with version stamped; `-Clear` moves the current history into `backup\` (dogfooding: start clean each reinstall) | M1 | done |
 
 ## Features / UX

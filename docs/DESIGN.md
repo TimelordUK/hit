@@ -236,7 +236,18 @@ PowerShell, in `hit.psm1`, using PowerShell's own parser:
    line-continuation tokens. Any difference → return the original. Worst case is "not tidied",
    never "broken".
 
-Pipelines: break before each `|` with a four-space indent (no backtick needed after a trailing `|`).
+Pipelines: break **after** each top-level `|` (a trailing pipe continues the line on its own,
+so no backtick is needed), with each stage's parameters indented one level deeper than the
+stage.
+
+**Both directions, on one key (S-023).** `Join-HitCommand` is the reverse: it drops line
+continuations and newlines between top-level tokens to bring a command back onto one line
+for editing. It refuses when a here-string or any other token owns a newline, because
+joining would change what the command means. **Alt+M** at the prompt toggles whichever way
+the buffer isn't: split a one-liner, join a continued one. Alt+M is claimed by neither
+Zellij, Windows Terminal nor PSReadLine (§14.1). Both directions are checked by re-parsing
+and comparing token streams, and a corpus of real commands must survive the round trip
+byte-identical (`tests/pwsh/Format.Tests.ps1`).
 
 zsh does the same thing with `${(z)cmd}` (zsh's own lexer), inserting `\` + newline.
 
