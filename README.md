@@ -49,6 +49,32 @@ replacing it, and re-hooks itself if something later takes over, but last is sim
 
 Open a new terminal. hit records from then on; `hit path history` shows where.
 
+### Without Go (locked-down network)
+
+If `go install` can't reach `proxy.golang.org`, download a prebuilt binary from
+[Releases](https://github.com/TimelordUK/hit/releases) instead — the integration script is
+embedded in it, so that one file is everything:
+
+```powershell
+# pick the newest release, Windows x64
+$tmp = New-TemporaryFile
+Invoke-WebRequest -Uri (
+    (Invoke-RestMethod https://api.github.com/repos/TimelordUK/hit/releases/latest).assets |
+        Where-Object name -like '*windows_amd64.zip' | Select-Object -ExpandProperty browser_download_url
+) -OutFile "$tmp.zip"
+$dest = "$env:LOCALAPPDATA\Programs\hit"
+Expand-Archive "$tmp.zip" -DestinationPath $dest -Force
+Unblock-File "$dest\hit.exe"
+# add $dest to your PATH (once), then the profile line above
+```
+
+Or just download the `.zip` in a browser, unpack it somewhere on your `PATH`, and add the
+same profile line. Checksums are in `SHA256SUMS.txt` on the release.
+
+A clone alone isn't enough behind such a proxy: building still needs the modules. If your
+network allows direct git access to the dependencies, `$env:GOPROXY='direct'` and
+`$env:GOFLAGS='-mod=mod'` sometimes gets through; otherwise use the release binary.
+
 ### From a clone instead
 
 ```powershell

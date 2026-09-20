@@ -1,0 +1,85 @@
+name: release
+
+# Publishes prebuilt binaries so hit can be installed on a machine that cannot reach
+# proxy.golang.org (a locked-down work network, say): download, unzip, put on PATH.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Run it by hand from the Actions tab to rebuild a release's assets.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build a release for (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build every platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.tag || github.ref_name }}"
+          mkdir -p dist
+          # Pure Go, so every target cross-compiles from here with CGO off.
+          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/arm64 darwin/amd64; do
+            os="${target%/*}"; arch="${target#*/}"
+            name="hit_${version}_${os}_${arch}"
+            bin="hit"; [ "$os" = "windows" ] && bin="hit.exe"
+            echo "building $name"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags "-s -w -X main.version=$version" -o "dist/$bin" ./cmd/hit
+            if [ "$os" = "windows" ]; then
+              (cd dist && zip -q "$name.zip" "$bin" && rm "$bin")
+            else
+              (cd dist && tar -czf "$name.tar.gz" "$bin" && rm "$bin")
+            fi
+          done
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          ls -l dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ inputs.tag || github.ref_name }}"
+          notes=$(cat <<'EOF'
+          ## Install without Go
+
+          Download the archive for your platform below, unpack it, and put `hit` (or
+          `hit.exe`) somewhere on your `PATH`.
+
+          **PowerShell 7:** add this as the last line of `$PROFILE`, then open a new terminal:
+
+          ```powershell
+          Invoke-Expression (& hit init pwsh | Out-String)
+          ```
+
+          The integration script is embedded in the binary, so there is nothing else to copy.
+          See the [readme](https://github.com/TimelordUK/hit#readme) for the keys and settings.
+
+          Checksums are in `SHA256SUMS.txt`.
+          EOF
+          )
+          gh release create "$version" dist/* \
+            --title "hit $version" \
+            --notes "$notes" \
+            --repo "${{ github.repository }}" || \
+          gh release upload "$version" dist/* --clobber --repo "${{ github.repository }}"
