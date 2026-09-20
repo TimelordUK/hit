@@ -1,0 +1,12 @@
+1  5.420  x2  exit=0  C:\dev\sql-cli
+     git status
+2  3.301  x2  exit=1  C:\dev\hit
+     go test ./...
+3  3.263  x1  exit=0  C:\dev\hit
+     Set-Location \\elastic-prod-1\logs
+4  3.062  x1  exit=1  C:\dev\hit
+     git stash pop
+5  2.513  x1  exit=0  C:\dev\hit
+     Get-ChildItem -Recurse -Filter *.go | Select-String TODO
+6  2.428  x2  exit=0  C:\dev\hit
+     Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post

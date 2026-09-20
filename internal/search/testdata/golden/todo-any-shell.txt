@@ -1,0 +1,10 @@
+1  3.625  x1  exit=0  /home/sjame/dev/hit
+     grep -r TODO .
+2  1.968  x1  exit=0  C:\dev\hit
+     Set-Location \\elastic-prod-1\logs
+3  1.776  x1  exit=0  C:\dev\hit
+     Get-ChildItem -Recurse -Filter *.go | Select-String TODO
+4  1.725  x2  exit=0  C:\dev\hit
+     Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post
+5  0.764  x1  exit=0  \\elastic-prod-1\logs
+     $body = @"⏎{ "size": 0 }⏎"@⏎Invoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post

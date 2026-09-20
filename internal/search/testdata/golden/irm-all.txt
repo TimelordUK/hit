@@ -1,0 +1,6 @@
+1  6.729  x1  exit=0  C:\dev\hit
+     irm https://elastic-prod-1:9200/_cat/indices
+2  3.136  x2  exit=0  C:\dev\hit
+     Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post
+3  1.108  x1  exit=0  \\elastic-prod-1\logs
+     $body = @"⏎{ "size": 0 }⏎"@⏎Invoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post

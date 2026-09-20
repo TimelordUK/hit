@@ -1,0 +1,12 @@
+1  8.179  x1  exit=0  C:\dev\hit
+     go test ./...
+2  2.918  x1  exit=0  C:\dev\hit
+     Set-Location \\elastic-prod-1\logs
+3  2.592  x1  exit=0  C:\dev\hit
+     irm https://elastic-prod-1:9200/_cat/indices
+4  2.022  x1  exit=0  C:\dev\hit
+     Get-ChildItem -Recurse -Filter *.go | Select-String TODO
+5  1.640  x2  exit=0  C:\dev\hit
+     Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post
+6  0.727  x1  exit=0  \\elastic-prod-1\logs
+     $body = @"⏎{ "size": 0 }⏎"@⏎Invoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post

@@ -1,0 +1,18 @@
+1  4.684  x2  exit=0  C:\dev\sql-cli
+     git status
+2  4.570  x1  exit=?  C:\dev\hit\
+     code .
+3  4.568  x1  exit=0  C:\dev\hit
+     Set-Location \\elastic-prod-1\logs
+4  4.546  x1  exit=0  C:\dev\hit
+     Get-ChildItem -Recurse -Filter *.go | Select-String TODO
+5  4.390  x2  exit=0  C:\dev\hit
+     Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post
+6  3.961  x2  exit=1  C:\dev\hit
+     go test ./...
+7  3.768  x1  exit=0  C:\dev\hit
+     irm https://elastic-prod-1:9200/_cat/indices
+8  3.035  x1  exit=0  \\elastic-prod-1\logs
+     $body = @"⏎{ "size": 0 }⏎"@⏎Invoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post
+9  2.646  x1  exit=1  C:\dev\hit
+     git stash pop

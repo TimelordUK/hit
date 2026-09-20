@@ -1,0 +1,10 @@
+1  4.570  x1  exit=?  C:\dev\hit\
+     code .
+2  4.568  x1  exit=0  C:\dev\hit
+     Set-Location \\elastic-prod-1\logs
+3  4.546  x1  exit=0  C:\dev\hit
+     Get-ChildItem -Recurse -Filter *.go | Select-String TODO
+4  3.961  x2  exit=1  C:\dev\hit
+     go test ./...
+5  3.035  x1  exit=0  \\elastic-prod-1\logs
+     $body = @"⏎{ "size": 0 }⏎"@⏎Invoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post

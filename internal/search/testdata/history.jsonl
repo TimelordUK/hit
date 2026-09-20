@@ -1,0 +1,28 @@
+{"k":"cmd","id":"01K5A0000000000000000001","ts":"2026-09-12T09:00:00.000Z","cmd":"Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post","cwd":"\\\\elastic-prod-1\\logs","sh":"pwsh","host":"box1","sid":"s1"}
+{"k":"end","id":"01K5A0000000000000000001","exit":0,"ms":420}
+{"k":"cmd","id":"01K5A0000000000000000002","ts":"2026-09-18T09:00:00.000Z","cmd":"Invoke-RestMethod -Uri https://elastic-prod-1:9200/logs-*/_search -Method Post","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s2"}
+{"k":"end","id":"01K5A0000000000000000002","exit":0,"ms":390}
+{"k":"cmd","id":"01K5A0000000000000000003","ts":"2026-09-19T08:00:00.000Z","cmd":"irm https://elastic-prod-1:9200/_cat/indices","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s2"}
+{"k":"end","id":"01K5A0000000000000000003","exit":0,"ms":120}
+{"k":"cmd","id":"01K5A0000000000000000004","ts":"2026-09-19T09:00:00.000Z","cmd":"git status","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s2"}
+{"k":"end","id":"01K5A0000000000000000004","exit":0,"ms":80}
+{"k":"cmd","id":"01K5A0000000000000000005","ts":"2026-09-19T09:05:00.000Z","cmd":"git status","cwd":"C:\\dev\\sql-cli","sh":"pwsh","host":"box1","sid":"s2"}
+{"k":"end","id":"01K5A0000000000000000005","exit":0,"ms":75}
+{"k":"cmd","id":"01K5A0000000000000000006","ts":"2026-09-19T09:10:00.000Z","cmd":"git stash pop","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s2"}
+{"k":"end","id":"01K5A0000000000000000006","exit":1,"ms":60}
+{"k":"cmd","id":"01K5A0000000000000000007","ts":"2026-09-19T10:00:00.000Z","cmd":"Get-ChildItem -Recurse -Filter *.go | Select-String TODO","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000007","exit":0,"ms":900}
+{"k":"cmd","id":"01K5A0000000000000000008","ts":"2026-09-19T10:30:00.000Z","cmd":"$body = @\"\n{ \"size\": 0 }\n\"@\nInvoke-RestMethod -Uri https://elastic-prod-2:9200/_search -Body $body -Method Post","cwd":"\\\\elastic-prod-1\\logs","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000008","exit":0,"ms":1500}
+{"k":"cmd","id":"01K5A0000000000000000009","ts":"2026-09-19T11:00:00.000Z","cmd":"go test ./...","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000009","exit":0,"ms":3000}
+{"k":"cmd","id":"01K5A0000000000000000010","ts":"2026-09-19T11:30:00.000Z","cmd":"go test ./...","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000010","exit":1,"ms":2500}
+{"k":"cmd","id":"01K5A0000000000000000011","ts":"2026-09-19T11:40:00.000Z","cmd":"grep -r TODO .","cwd":"/home/sjame/dev/hit","sh":"zsh","host":"box2","sid":"z1"}
+{"k":"end","id":"01K5A0000000000000000011","exit":0,"ms":50}
+{"k":"cmd","id":"01K5A0000000000000000012","ts":"2026-09-19T11:45:00.000Z","cmd":"Set-Location \\\\elastic-prod-1\\logs","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000012","exit":0,"ms":30}
+{"k":"cmd","id":"01K5A0000000000000000013","ts":"2026-09-19T11:50:00.000Z","cmd":"deleted command","cwd":"C:\\dev\\hit","sh":"pwsh","host":"box1","sid":"s3"}
+{"k":"end","id":"01K5A0000000000000000013","exit":0,"ms":10}
+{"k":"del","id":"01K5A0000000000000000013","ts":"2026-09-19T11:51:00.000Z"}
+{"k":"cmd","id":"01K5A0000000000000000014","ts":"2026-09-19T11:55:00.000Z","cmd":"code .","cwd":"C:\\dev\\hit\\","sh":"pwsh","host":"box1","sid":"s3"}
