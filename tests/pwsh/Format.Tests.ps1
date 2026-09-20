@@ -73,9 +73,26 @@ Describe 'Join-HitCommand' {
         Join-HitCommand $crlf | Should -BeExactly 'irm -Uri x'
     }
 
-    It 'refuses to join a here-string, whose newlines are part of the command' {
+    It 'refuses to join separate statements, which would need a semicolon' {
         $cmd = '$body = @"' + $LF + '{ "size": 0 }' + $LF + '"@' + $LF + 'irm -Body $body'
-        Join-HitCommand $cmd | Should -BeExactly $cmd
+        $reason = $null
+        Join-HitCommand $cmd -Reason ([ref]$reason) | Should -BeExactly $cmd
+        $reason | Should -Be 'it is more than one statement'
+    }
+
+    # From daily use (2026-09-20): Alt+M appeared to do nothing on this buffer. The SQL
+    # string really does span lines and must be left alone, but the continuations around
+    # it can still be collapsed.
+    It 'joins around a string that spans lines, leaving the string itself intact' {
+        $sql = '"WITH r AS (SELECT * FROM read_jsonl(''-'')), ' + $BT + $LF +
+        '     c AS (SELECT id, cmd FROM r WHERE k = ''cmd'') ' + $BT + $LF +
+        ' SELECT * FROM c"'
+        $cmd = 'cat history.jsonl | ' + $BT + $LF + '  sql-cli -q ' + $sql
+        $out = Join-HitCommand $cmd
+        $out | Should -Not -Be $cmd -Because 'the continuations outside the string can go'
+        Test-HitSameCommand $cmd $out | Should -BeTrue
+        $out | Should -BeLike 'cat history.jsonl | sql-cli -q "WITH r*'
+        $out | Should -Match ([regex]::Escape($BT + $LF)) -Because 'the string keeps its own lines'
     }
 
     It 'leaves a single-line command alone' {
@@ -118,12 +135,13 @@ Describe 'Round trip over a corpus of real commands' {
 
 Describe 'Invoke-HitToggleMultiline' {
     BeforeEach {
-        $script:Editor = [pscustomobject]@{ Buffer = ''; Redraws = 0 }
+        $script:Editor = [pscustomobject]@{ Buffer = ''; Redraws = 0; Notices = @() }
         $fake = $script:Editor
         $script:HitEditor = @{
             GetBuffer = { $fake.Buffer }.GetNewClosure()
             SetBuffer = { param([string]$Text) $fake.Buffer = $Text }.GetNewClosure()
             Redraw    = { $fake.Redraws++ }.GetNewClosure()
+            Notify    = { param([string]$Message) $fake.Notices += $Message }.GetNewClosure()
         }
     }
 
@@ -142,5 +160,16 @@ Describe 'Invoke-HitToggleMultiline' {
             { Invoke-HitToggleMultiline } | Should -Not -Throw
             $script:Editor.Buffer | Should -BeExactly $buffer
         }
+    }
+
+    It 'says why when it leaves the buffer alone, instead of looking dead' {
+        $script:Editor.Buffer = 'irm -Uri "oops'
+        Invoke-HitToggleMultiline
+        $script:Editor.Notices | Should -HaveCount 1
+        $script:Editor.Notices[0] | Should -BeLike "*doesn't parse*"
+
+        $script:Editor.Buffer = 'ls'
+        Invoke-HitToggleMultiline
+        $script:Editor.Notices[-1] | Should -BeLike '*nothing to split*'
     }
 }

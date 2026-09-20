@@ -294,6 +294,13 @@ $script:HitEditor = @{
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert($Text)
     }
     Redraw    = { [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() }
+    # A one-line note above the prompt, then redraw so the buffer is untouched.
+    Notify    = {
+        param([string]$Message)
+        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt(0)
+        Write-Host $Message -ForegroundColor DarkGray
+        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+    }
 }
 
 # Appends to $TEMP\hit-debug.log when HIT_DEBUG is set. The finder swallows its errors so a
@@ -458,14 +465,16 @@ function Format-HitCommand {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$Command,
-        [string]$Indent = '    '
+        [string]$Indent = '    ',
+        [ref]$Reason
     )
+    $setReason = { param($why) if ($Reason) { $Reason.Value = $why } }
     if ([string]::IsNullOrWhiteSpace($Command)) { return $Command }
-    if ($Command -match '[\r\n]') { return $Command }  # already multi-line
+    if ($Command -match '[\r\n]') { & $setReason 'already on several lines'; return $Command }
 
     $errors = $null
     $tokens = Get-HitTokens $Command ([ref]$errors)
-    if ($errors.Count) { return $Command }
+    if ($errors.Count) { & $setReason "it doesn't parse"; return $Command }
 
     # Pipeline stages line up under each other; a stage's parameters sit one level deeper.
     $breaks = [System.Collections.Generic.List[object]]::new()
@@ -484,7 +493,7 @@ function Format-HitCommand {
             $breaks.Add([pscustomobject]@{ Offset = $t.Extent.EndOffset; AfterPipe = $true; Level = 1 })
         }
     }
-    if ($breaks.Count -eq 0) { return $Command }
+    if ($breaks.Count -eq 0) { & $setReason 'there is nothing to split on'; return $Command }
 
     $sb = [System.Text.StringBuilder]::new()
     $pos = 0
@@ -504,37 +513,63 @@ function Format-HitCommand {
     $null = $sb.Append($Command.Substring($pos).TrimStart())
     $result = $sb.ToString()
 
-    if (-not (Test-HitSameCommand $Command $result)) { return $Command }
+    if (-not (Test-HitSameCommand $Command $result)) {
+        & $setReason 'the check refused it'
+        return $Command
+    }
     $result
 }
 
-# The reverse: brings a continued command back onto one line for editing.
+# A bare newline may only be collapsed when the line before it cannot stand alone: after a
+# pipe, a chained operator, a comma, an assignment or an opening brace. Anywhere else the
+# newline separates two statements, and joining them would need a `;` — that is a rewrite,
+# not a reflow, so the command is left alone instead.
+$script:HitContinuingKinds = @(
+    'Pipe', 'AndAnd', 'OrOr', 'Ampersand', 'Comma', 'Equals', 'PlusEquals', 'MinusEquals',
+    'MultiplyEquals', 'DivideEquals', 'RemainderEquals', 'LCurly', 'LParen', 'LBracket',
+    'AtCurly', 'AtParen', 'DollarParen', 'Semi'
+)
+
+# The reverse: brings a continued command back onto one line for editing. Newlines that
+# live *inside* a token (a here-string, or a double-quoted string written across lines)
+# belong to the command's text and are left exactly as they are.
 function Join-HitCommand {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][AllowEmptyString()][string]$Command)
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Command,
+        [ref]$Reason
+    )
+    $setReason = { param($why) if ($Reason) { $Reason.Value = $why } }
     if ([string]::IsNullOrWhiteSpace($Command)) { return $Command }
-    if ($Command -notmatch '[\r\n]') { return $Command }  # already one line
+    if ($Command -notmatch '[\r\n]') { & $setReason 'already on one line'; return $Command }
 
     $errors = $null
     $tokens = Get-HitTokens $Command ([ref]$errors)
-    if ($errors.Count) { return $Command }
+    if ($errors.Count) { & $setReason "it doesn't parse"; return $Command }
 
-    # A here-string or a multi-line string owns its newlines: joining would change the
-    # command's meaning, so leave it alone.
-    foreach ($t in $tokens) {
-        if ($t.Kind -notin @('NewLine', 'LineContinuation') -and $t.Text -match '[\r\n]') { return $Command }
-    }
-
+    $significant = @($tokens | Where-Object { $_.Kind -notin @('NewLine', 'LineContinuation', 'EndOfInput') })
     $sb = [System.Text.StringBuilder]::new()
     $pos = 0
     $pendingSpace = $false
+    $seen = 0
     foreach ($t in $tokens) {
         if ($t.Kind -eq 'EndOfInput') { break }
-        if ($t.Kind -in @('NewLine', 'LineContinuation')) {
+        if ($t.Kind -eq 'NewLine') {
+            $prev = if ($seen -gt 0) { $significant[$seen - 1].Kind } else { $null }
+            if ($prev -and $prev -notin $script:HitContinuingKinds) {
+                & $setReason 'it is more than one statement'
+                return $Command
+            }
             $pendingSpace = $true
             $pos = $t.Extent.EndOffset
             continue
         }
+        if ($t.Kind -eq 'LineContinuation') {
+            $pendingSpace = $true
+            $pos = $t.Extent.EndOffset
+            continue
+        }
+        $seen++
         $gap = $Command.Substring($pos, $t.Extent.StartOffset - $pos)
         if ($pendingSpace -or $gap -match '[\r\n]') {
             if ($sb.Length -gt 0) { $null = $sb.Append(' ') }
@@ -547,18 +582,32 @@ function Join-HitCommand {
     }
     $result = $sb.ToString().Trim()
 
-    if (-not (Test-HitSameCommand $Command $result)) { return $Command }
+    if (-not (Test-HitSameCommand $Command $result)) {
+        & $setReason 'the check refused it'
+        return $Command
+    }
+    if ($result -eq $Command) { & $setReason 'its newlines are inside a string' }
     $result
 }
 
-# Alt+M: one line ↔ many lines, whichever way the buffer isn't.
+# Alt+M: one line ↔ many lines, whichever way the buffer isn't. When nothing can be done
+# safely it says so instead of appearing to ignore the key.
 function Invoke-HitToggleMultiline {
     try {
         $buffer = & $script:HitEditor.GetBuffer
         if ([string]::IsNullOrWhiteSpace($buffer)) { return }
-        $result = if ($buffer -match '[\r\n]') { Join-HitCommand $buffer } else { Format-HitCommand $buffer }
-        if ($result -ne $buffer) { & $script:HitEditor.SetBuffer $result }
-        else { Write-HitDebug "toggle: unchanged (parse error, nothing to split, or not safe)" }
+        $reason = $null
+        $result = if ($buffer -match '[\r\n]') {
+            Join-HitCommand $buffer -Reason ([ref]$reason)
+        } else {
+            Format-HitCommand $buffer -Reason ([ref]$reason)
+        }
+        if ($result -ne $buffer) {
+            & $script:HitEditor.SetBuffer $result
+            return
+        }
+        Write-HitDebug "toggle: unchanged ($reason)"
+        if ($reason -and $script:HitEditor.Notify) { & $script:HitEditor.Notify "hit: left as it is, $reason" }
     } catch {
         Write-HitDebug ("toggle error: " + ($_ | Out-String))
     }
