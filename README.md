@@ -5,44 +5,128 @@ PowerShell and zsh.
 
 > You never lose something you typed, and you never lose somewhere you went.
 
-**Status:** M1 in progress (core store and test harness). Nothing to install yet.
+**Status:** M1, usable daily on PowerShell 7 (recording, Ctrl+R finder, Alt+M reflow).
+Directory jumping and prod guards are next; zsh comes after that.
 
-## Development
+## Why another history tool?
 
-Needs Go and PowerShell 7 with Pester 5+. `./scripts/test.ps1` runs what CI runs.
+- **Multi-line commands are first class.** A 4-line `Invoke-RestMethod` to Elasticsearch
+  comes back exactly as you typed it, byte for byte.
+- **No database.** History is a plain append-only JSONL file you can grep, sync, and query.
+  There's no "can't open connection to db".
+- **Network shares are first class.** Directory jumping never stats remote paths, so
+  `\\server\share` entries stay fast and don't get pruned.
+- **Nothing on the hot path.** Recording a command costs ~0.8 ms in-process: no process is
+  started, nothing touches the network.
+- **PowerShell first, zsh second.** Windows and Linux.
 
-Try it (PowerShell 7):
+## Install (PowerShell 7)
+
+Needs [Go](https://go.dev/dl/) 1.25+ and PowerShell 7 with PSReadLine 2.2+ (`$PSVersionTable`,
+`Get-Module PSReadLine -ListAvailable`).
 
 ```powershell
-./scripts/install.ps1          # go install, version stamped from git
-./scripts/install.ps1 -Clear   # same, and start with an empty history (old file moved to backup\)
+go install github.com/TimelordUK/hit/cmd/hit@latest
 ```
 
-Then add this as the last line of `$PROFILE` and open a new terminal:
+That puts `hit.exe` in `~\go\bin` (`go env GOPATH`\bin). Make sure that's on your `PATH`:
+
+```powershell
+if (-not (Get-Command hit -ErrorAction SilentlyContinue)) {
+    $env:PATH += ';' + (Join-Path (go env GOPATH) 'bin')   # and add it permanently
+}
+```
+
+Then add **one line at the end of your profile** (`notepad $PROFILE`):
 
 ```powershell
 Invoke-Expression (& hit init pwsh | Out-String)
 ```
 
-`hit path history` shows where history is kept. `Disable-Hit` stops recording in the current session.
+Put it **last**, after anything else that hooks the prompt or PSReadLine (starship,
+oh-my-posh, zoxide, PSFzf, mcfly). hit chains whatever is already there rather than
+replacing it, and re-hooks itself if something later takes over, but last is simplest.
 
-## Why another history tool?
+Open a new terminal. hit records from then on; `hit path history` shows where.
 
-- **Multi-line commands are first class.** A 4-line `Invoke-RestMethod` to Elasticsearch comes
-  back exactly as you typed it, and long one-liners can be tidied into one argument per line
-  using PowerShell's own parser.
-- **No database.** History is a plain append-only JSONL file you can grep, sync, and query.
-  There's no "can't open connection to db".
-- **Network shares are first class.** Directory jumping never stats remote paths, so `\\server\share`
-  entries stay fast and don't get pruned.
-- **Prod failsafes.** Optional rules that warn, ask for confirmation, or block commands aimed at things
-  you really don't want to hit by accident.
-- **PowerShell first, zsh second.** Windows and Linux.
+### From a clone instead
+
+```powershell
+git clone https://github.com/TimelordUK/hit.git; cd hit
+./scripts/install.ps1            # go install with the git version stamped in
+./scripts/install.ps1 -Clear     # same, but start from an empty history
+```
+
+`-Clear` moves the current history file into `<data dir>\backup\` rather than deleting it.
+
+## Using it
+
+| Key | What it does |
+|---|---|
+| **Ctrl+R** | open the finder, seeded with whatever you've typed |
+| **Alt+M** | split a long command at its parameters and pipes, or join it back onto one line |
+
+Both work in vi and Windows edit modes.
+
+**In the finder:** type to filter (fuzzy, in order; a capital letter makes that letter
+case-sensitive). `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` move. `Enter` puts the command in your
+prompt without running it, `Tab` the same for further editing, `Esc` cancels.
+`Ctrl+R` again cycles the scope: this directory → this session → this machine → everything.
+`Ctrl+X` hides commands that failed. `Del` deletes an entry, `Ctrl+Z` undoes that while the
+finder is open. Multi-line commands show a `⏎ +N` marker, with the whole command, its
+directory, exit code and duration in the preview.
+
+**Alt+M** uses PowerShell's own parser and re-parses its own output: if the token stream
+isn't identical, you get your command back untouched. It won't merge separate statements or
+touch newlines that belong to a string or here-string, and it tells you when it leaves
+something alone. Your stored history is never rewritten; this only changes the prompt buffer.
+
+### Commands
+
+```powershell
+hit search --scope all           # the finder, standalone
+hit search --print --limit 20    # same ranking, JSON lines, no TUI (for scripts and fzf)
+hit path history|data|config     # where things live
+hit init pwsh                    # print the integration script
+hit version
+```
+
+### Turning it off
+
+`Disable-Hit` stops recording in the current session and gives Ctrl+R back to PSReadLine.
+Remove the profile line to stop it permanently. Your history file stays where it is.
+
+### If something misbehaves
+
+```powershell
+$env:HIT_DEBUG = 1               # then reproduce, and read:
+Get-Content $env:TEMP\hit-debug.log
+```
+
+The finder runs inside a key handler where errors are swallowed on purpose (a broken hit must
+never break your prompt), so that log is how it reports for duty.
+
+## Settings
+
+| | Default | Override |
+|---|---|---|
+| Data | `%LOCALAPPDATA%\hit\` · `~/.local/share/hit/` | `HIT_DATA_DIR` |
+| Config | `%APPDATA%\hit\config.toml` · `~/.config/hit/config.toml` | `HIT_CONFIG` |
+
+Commands typed with a leading space aren't recorded. Commands PSReadLine considers sensitive
+(password, token, apikey, secret) aren't recorded either.
 
 ## Docs
 
 - [Design](docs/DESIGN.md)
 - [Wishlist](docs/WISHLIST.md) (`C-` core · `S-` shell · `F-` features)
+
+## Development
+
+Needs Go and PowerShell 7 with Pester 5+. `./scripts/test.ps1` runs exactly what CI runs:
+`go vet`, `go test`, a short fuzz pass and the Pester suites. CI runs it on Windows and Ubuntu.
+
+Bugs from daily use become a failing test first, then a fix (DESIGN §13.3).
 
 ## License
 
