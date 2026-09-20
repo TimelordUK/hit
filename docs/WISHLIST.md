@@ -42,6 +42,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-025 | `hit import zoxide` (`zoxide query --list --score`) so directory ranking carries over | M2 | idea |
 | C-026 | Learn from finder picks: record what was chosen (new record kind, schema first) and weight it in ranking, so the commands you actually reach for float up | ? | idea |
 | C-027 | `hit path data\|history\|config`: print resolved paths for scripts and `hit doctor` | M1 | done |
+| C-028 | Release workflow: tag `v*` cross-compiles windows/linux/darwin (amd64+arm64), publishes archives + SHA256SUMS, so hit installs where `proxy.golang.org` is blocked | M1 | done |
 
 ## Shell
 
