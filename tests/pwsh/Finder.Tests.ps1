@@ -112,6 +112,25 @@ Describe 'Invoke-HitFinder' {
     }
 }
 
+Describe 'The real runner' {
+    # It must inherit the console (no redirection), or the finder draws into a pipe and
+    # Ctrl+R looks dead while the binary runs. Here we only check the mechanism: the
+    # process starts, is waited for, and its exit code comes back. The TUI itself needs a
+    # terminal, which is the pty smoke test (S-017).
+    BeforeAll { . (Join-Path $PSScriptRoot '..' '..' 'shell' 'pwsh' 'hit.ps1') }
+
+    It 'starts the binary, waits, and returns its exit code' {
+        $script:HitExe = (Get-Process -Id $PID).Path   # pwsh itself stands in for hit
+        & $script:HitRunner @('-NoProfile', '-NonInteractive', '-Command', 'exit 7') | Should -Be 7
+    }
+
+    It 'does not capture the child output into the pipeline' {
+        $script:HitExe = (Get-Process -Id $PID).Path
+        $out = & $script:HitRunner @('-NoProfile', '-NonInteractive', '-Command', '"to the console"')
+        $out | Should -Be 0   # only the exit code, never the child's output
+    }
+}
+
 Describe 'Key bindings' {
     BeforeAll { Import-Module PSReadLine }
 

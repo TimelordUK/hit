@@ -76,11 +76,18 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	choice, err := runFinder(h, q)
+	debugf(env, "search: %d entries, scope=%s query=%q out=%q", len(h.Entries), q.Scope, q.Text, *out)
+	var log func(string, ...any)
+	if env.Getenv("HIT_DEBUG") != "" {
+		log = func(format string, args ...any) { debugf(env, "tui: "+format, args...) }
+	}
+	choice, err := runFinder(h, q, *out != "", log)
 	if err != nil {
+		debugf(env, "finder failed: %v", err)
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}
+	debugf(env, "finder returned: action=%s len(cmd)=%d deleted=%d", choice.Action, len(choice.Cmd), len(choice.Deleted))
 	if len(choice.Deleted) > 0 {
 		if err := tombstone(histPath, choice.Deleted, now()); err != nil {
 			fmt.Fprintln(stderr, "hit: could not delete:", err)
@@ -90,11 +97,17 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 }
 
 // runFinder is split out so the TUI is the only part that needs a terminal.
-func runFinder(h *store.History, q search.Query) (*tui.Choice, error) {
+// With --out the result goes to that file, so the finder can draw on stdout, which is the
+// stream terminals handle best. Without it the result goes to stdout, so the finder draws
+// on stderr instead to keep stdout parseable.
+func runFinder(h *store.History, q search.Query, hasOut bool, log func(string, ...any)) (*tui.Choice, error) {
 	m := tui.New(h, q)
-	// The finder draws on the alternate screen and reads the terminal directly, so a
-	// piped stdout (the shell captures it) doesn't disturb it.
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
+	m.Log = log
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	if !hasOut {
+		opts = append(opts, tea.WithOutput(os.Stderr))
+	}
+	p := tea.NewProgram(m, opts...)
 	final, err := p.Run()
 	if err != nil {
 		return nil, err

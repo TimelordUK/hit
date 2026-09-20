@@ -68,8 +68,11 @@ func (m Model) View() string {
 		b.WriteString(m.renderPreview(s, p, now))
 	}
 	b.WriteString(s.dim.Render(m.statusLine()))
-	return b.String()
-
+	out := b.String()
+	if m.renders == 0 {
+		m.logf("first render: %d bytes, %d results, %dx%d", len(out), len(m.results), m.width, m.height)
+	}
+	return out
 }
 
 // statusLine drops hints from the right as the pane narrows, keeping the position.

@@ -296,11 +296,33 @@ $script:HitEditor = @{
     Redraw    = { [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() }
 }
 
-# Runs the binary. Replaced in tests by one that writes a canned choice.
+# Appends to $TEMP\hit-debug.log when HIT_DEBUG is set. The finder swallows its errors so a
+# failure can never break the prompt, which also hides them: this is how we get them back.
+function Write-HitDebug([string]$Message) {
+    if (-not $env:HIT_DEBUG) { return }
+    try {
+        Add-Content -LiteralPath (Join-Path ([System.IO.Path]::GetTempPath()) 'hit-debug.log') `
+            -Value ('{0:HH:mm:ss.fff}  {1}' -f (Get-Date), $Message)
+    } catch { }
+}
+
+# Runs the binary and waits. Replaced in tests by one that writes a canned choice.
+#
+# Not `& $exe …`: inside a key handler PowerShell collects a native command's output into
+# the pipeline, so the child's stdout is a pipe and the finder draws into nothing (the
+# symptom was Ctrl+R "doing nothing" while the binary ran happily). Starting the process
+# with UseShellExecute=$false and no redirection lets it inherit the real console, so the
+# TUI draws and reads keys directly. ArgumentList quotes each argument properly, which
+# matters because --query carries the prompt buffer verbatim, newlines and all.
 $script:HitRunner = {
     param([string[]]$Arguments)
-    $null = & $script:HitExe @Arguments   # the TUI draws on stderr; stdout stays clean
-    $LASTEXITCODE
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $script:HitExe
+    foreach ($a in $Arguments) { $null = $psi.ArgumentList.Add($a) }
+    $psi.UseShellExecute = $false
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $proc.WaitForExit()
+    $proc.ExitCode
 }
 
 # Builds the argument list for `hit search`. Pure, so tests can check it.
@@ -324,18 +346,25 @@ function Invoke-HitFinder {
     $out = [System.IO.Path]::GetTempFileName()
     try {
         $query = & $script:HitEditor.GetBuffer
-        $code = & $script:HitRunner (New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope)
+        $arguments = New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope
+        Write-HitDebug ("run: {0} {1}" -f $script:HitExe, ($arguments -join ' '))
+        $code = & $script:HitRunner $arguments
+        Write-HitDebug "exit: $code"
         if ($code -ne 0) { return }
         $choice = $null
         if (Test-Path -LiteralPath $out) {
             $text = [System.IO.File]::ReadAllText($out)
+            Write-HitDebug "choice: $text"
             if ($text.Trim()) { $choice = ConvertFrom-Json $text }
+        } else {
+            Write-HitDebug "no out file"
         }
         if ($choice -and $choice.action -in @('insert', 'edit') -and $choice.cmd) {
             & $script:HitEditor.SetBuffer $choice.cmd
         }
     } catch {
         # Principle 7: a broken finder must never break the prompt.
+        Write-HitDebug ("error: " + ($_ | Out-String))
     } finally {
         Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
         & $script:HitEditor.Redraw

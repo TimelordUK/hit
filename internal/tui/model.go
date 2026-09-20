@@ -41,6 +41,18 @@ type Model struct {
 
 	width, height int
 	Choice        *Choice // set when the finder is done
+
+	// Log, when set, records what the finder receives and draws. The finder runs inside
+	// a key handler where nothing is visible, so this is the only way to see it work.
+	Log func(format string, args ...any)
+
+	renders int
+}
+
+func (m *Model) logf(format string, args ...any) {
+	if m.Log != nil {
+		m.Log(format, args...)
+	}
 }
 
 // New builds a finder over h. q carries the seed text, scope and context.
@@ -115,10 +127,12 @@ func (m *Model) finish(a Action) {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.logf("size %dx%d", msg.Width, msg.Height)
 		m.width, m.height = msg.Width, msg.Height
 		m.clampCursor()
 		return m, nil
 	case tea.KeyMsg:
+		m.logf("key %q", msg.String())
 		return m.handleKey(msg)
 	}
 	return m, nil
