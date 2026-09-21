@@ -9,6 +9,7 @@ import (
 
 	"github.com/TimelordUK/hit/internal/search"
 	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/internal/timing"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -45,6 +46,11 @@ type Model struct {
 	// Log, when set, records what the finder receives and draws. The finder runs inside
 	// a key handler where nothing is visible, so this is the only way to see it work.
 	Log func(format string, args ...any)
+
+	// Timing, when set, is the run's timeline. The first View marks "paint" and draws
+	// the report, so the number you read is the time to the frame you are reading it on
+	// (DESIGN §15). nil switches the whole thing off.
+	Timing *timing.Timeline
 
 	renders int
 }
@@ -252,6 +258,9 @@ func (m Model) previewRows() int {
 
 func (m Model) listRows() int {
 	rows := m.height - 2 // header + status line
+	if m.timingLine() != "" {
+		rows-- // the timing report takes a row from the list, not from the screen
+	}
 	if p := m.previewRows(); p > 0 {
 		rows -= p + 1 // preview plus its separator
 	}

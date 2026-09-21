@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/shell"
@@ -13,6 +14,13 @@ import (
 
 // version is set at build time with -ldflags "-X main.version=…".
 var version = "dev"
+
+// processStart is as early as this program can observe itself: package initialisation,
+// before main runs. Everything before it — the loader, the Go runtime, and on a managed
+// machine whatever inspects the binary first — is only visible by comparing this with
+// the moment the shell spawned us (`hit search --started-at`), which is why that flag
+// exists (DESIGN §15).
+var processStart = time.Now()
 
 const usage = `usage: hit <command>
 

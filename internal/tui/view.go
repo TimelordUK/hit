@@ -39,6 +39,11 @@ func (m Model) View() string {
 	if m.Choice != nil {
 		return "" // done: leave the screen clean for the shell
 	}
+	// Marked before anything is rendered, so "paint" is the time to the frame you are
+	// about to read the number on, not the time to render the number itself.
+	if !m.Timing.Marked("paint") {
+		m.Timing.Mark("paint")
+	}
 	s := newStyles()
 	now := m.query.Now
 	if now.IsZero() {
@@ -82,12 +87,24 @@ func (m Model) View() string {
 		b.WriteString(s.sep.Render(strings.Repeat("─", max(1, m.width))) + "\n")
 		b.WriteString(m.renderPreview(s, p, now))
 	}
+	if line := m.timingLine(); line != "" {
+		b.WriteString(s.meta.Render(truncate(line, m.width)) + "\n")
+	}
 	b.WriteString(s.dim.Render(m.statusLine()))
 	out := b.String()
 	if m.renders == 0 {
 		m.logf("first render: %d bytes, %d results, %dx%d", len(out), len(m.results), m.width, m.height)
 	}
 	return out
+}
+
+// timingLine is the phase report, shown only with HIT_TIMING set. It is deliberately the
+// raw numbers: it exists to be read off a screen and pasted into a bug report.
+func (m Model) timingLine() string {
+	if s := m.Timing.String(); s != "" {
+		return "⏱ " + s
+	}
+	return ""
 }
 
 // statusLine drops hints from the right as the pane narrows, keeping the position.

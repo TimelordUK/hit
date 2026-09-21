@@ -7,7 +7,26 @@ import (
 	"time"
 
 	"github.com/TimelordUK/hit/internal/paths"
+	"github.com/TimelordUK/hit/internal/timing"
 )
+
+// newTimeline returns a timeline when HIT_TIMING is set, and nil otherwise — nil being a
+// working no-op, so the normal run carries no checks and no cost (DESIGN §15).
+//
+// startedMs is the shell's clock when it spawned us. With it, the timeline starts there
+// and the first span is process creation; without it, the timeline starts at our own
+// package initialisation and that span is simply not visible.
+func newTimeline(env paths.Env, startedMs int64) *timing.Timeline {
+	if env.Getenv == nil || env.Getenv("HIT_TIMING") == "" {
+		return nil
+	}
+	if startedMs <= 0 {
+		return timing.New(processStart)
+	}
+	tl := timing.New(time.UnixMilli(startedMs))
+	tl.MarkAt("spawn", processStart)
+	return tl
+}
 
 // debugf appends a line to $TEMP/hit-debug.log when HIT_DEBUG is set, matching the pwsh
 // side's Write-HitDebug. The finder runs inside a key handler where nothing is visible,
@@ -16,6 +35,19 @@ func debugf(env paths.Env, format string, args ...any) {
 	if env.Getenv == nil || env.Getenv("HIT_DEBUG") == "" {
 		return
 	}
+	appendLog(format, args...)
+}
+
+// timingf is the same log under the other switch: HIT_TIMING is for one number and
+// should not oblige you to wade through every key press to find it.
+func timingf(env paths.Env, format string, args ...any) {
+	if env.Getenv == nil || env.Getenv("HIT_TIMING") == "" {
+		return
+	}
+	appendLog(format, args...)
+}
+
+func appendLog(format string, args ...any) {
 	f, err := os.OpenFile(filepath.Join(os.TempDir(), "hit-debug.log"),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

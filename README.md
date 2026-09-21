@@ -132,6 +132,28 @@ Get-Content $env:TEMP\hit-debug.log
 The finder runs inside a key handler where errors are swallowed on purpose (a broken hit must
 never break your prompt), so that log is how it reports for duty.
 
+### If Ctrl+R feels slow
+
+```powershell
+$env:HIT_TIMING = 1              # then hit Ctrl+R; the report is in the finder
+Get-Content $env:TEMP\hit-debug.log
+```
+
+You get a phase breakdown from both sides, e.g.
+
+```
+timing (go): spawn 2841 · init 0 · read 2 · build 0 · rank 1 · paint 4 · total 2848 ms
+timing (pwsh): temp 11 · buffer 0 · run 3204 · readback 6 · redraw 2 · total 3223 ms
+```
+
+`spawn` is process creation — the loader, the Go runtime, and on a managed machine whatever
+scans the binary before it may run. It is measured across both processes, so it is the one
+number neither side could report alone. `run` spans the whole finder session, so it includes
+your own time looking at it.
+
+History size is almost never the answer: 24k lines of history costs ~37 ms to load and rank.
+See [DESIGN §15](docs/DESIGN.md) for what each phase covers.
+
 ## Settings
 
 | | Default | Override |

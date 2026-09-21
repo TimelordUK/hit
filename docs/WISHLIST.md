@@ -43,6 +43,7 @@ Every idea goes here, however wild. We refine them by using the tool.
 | C-026 | Learn from finder picks: record what was chosen (new record kind, schema first) and weight it in ranking, so the commands you actually reach for float up | ? | idea |
 | C-027 | `hit path data\|history\|config`: print resolved paths for scripts and `hit doctor` | M1 | done |
 | C-028 | Release workflow: tag `v*` cross-compiles windows/linux/darwin (amd64+arm64), publishes archives + SHA256SUMS, so hit installs where `proxy.golang.org` is blocked | M1 | done |
+| C-029 | `HIT_TIMING` phase timings (DESIGN §15): elapsed ms for spawn, init, read, build, rank and first paint, shown in the finder and logged, so a slow Ctrl+R is attributed to a phase instead of guessed at. `--started-at` lets the binary measure its own process creation. Measured 2026-09-21: a day's history (70 commands / 380 lines) costs ~1 ms of an ~8 ms total, and 24.6k lines costs 37 ms — so recall latency is not history size | M1 | done |
 
 ## Shell
 
@@ -70,7 +71,10 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-020 | C# `ICommandPredictor` plugin reading hit's history for PSReadLine predictions | later | idea |
 | S-021 | `h` / `hit` command opens the finder as a no-key fallback | M1 | planned |
 | S-023 | pwsh: `Join-HitCommand` + Alt+M toggle: split a one-liner at top-level parameters/pipes, or bring a continued command back onto one line for editing | M1 | done |
+| S-026 | If `spawn` turns out to own the recall time on a managed machine: keep one warm `hit` process per shell session rather than spawning per Ctrl+R. Weigh against principle 2 (no daemon) — a per-session child is not a service, but it is close enough to need a decision | M2 | idea |
 | S-022 | `scripts/install.ps1`: build + install with version stamped; `-Clear` moves the current history into `backup\` (dogfooding: start clean each reinstall) | M1 | done |
+| S-024 | `HIT_TIMING` phase timings in `Invoke-HitFinder` (DESIGN §15): temp-file create, buffer read, the run, read-back and redraw, plus `--started-at` so the binary can report process creation. Ctrl+R felt like 2.5–3 s on an AV-heavy work machine while the Go side is ~8 ms — this says which phase owns it | M1 | done |
+| S-025 | Stop using `[System.IO.Path]::GetTempFileName()` for the finder handoff: it creates a file in `%TEMP%`, which corporate AV scans on every Ctrl+R, and the Win32 call linear-probes for a free name as `%TEMP%` fills over a day. Use one fixed per-session path (or a pipe / stdout handoff) instead. Blocked on S-024 confirming it matters: read the `temp` phase | M1 | idea |
 
 ## Features / UX
 

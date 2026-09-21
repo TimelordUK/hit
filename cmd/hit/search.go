@@ -13,6 +13,7 @@ import (
 	"github.com/TimelordUK/hit/internal/record"
 	"github.com/TimelordUK/hit/internal/search"
 	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/internal/timing"
 	"github.com/TimelordUK/hit/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -34,25 +35,33 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		okOnly  = fs.Bool("ok-only", false, "hide commands that failed")
 		out     = fs.String("out", "", "write the chosen command here as JSON")
 		print   = fs.Bool("print", false, "print ranked results as JSON lines and exit")
+		started = fs.Int64("started-at", 0, "unix ms when the shell spawned us (for --timing)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+
+	// The timeline starts when the shell called Process.Start, when it told us, so the
+	// first span is process creation — the part neither side can see on its own.
+	tl := newTimeline(env, *started)
 
 	histPath, err := paths.History(env)
 	if err != nil {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}
+	tl.Mark("init")
 	recs, st, err := store.ReadFile(histPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}
+	tl.Mark("read")
 	if st.Corrupt > 0 {
 		fmt.Fprintf(stderr, "hit: skipped %d damaged lines in %s\n", st.Corrupt, histPath)
 	}
 	h := store.Build(recs)
+	tl.Mark("build")
 
 	now, err := clock.FromEnv(env.Getenv)
 	if err != nil {
@@ -73,6 +82,10 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
+		// --print with --started-at is the no-TUI way to measure process creation on its
+		// own: the terminal is out of the picture, so what is left is the spawn.
+		tl.Mark("rank")
+		timingf(env, "timing (go, --print): %s", tl)
 		return 0
 	}
 
@@ -81,7 +94,10 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	if env.Getenv("HIT_DEBUG") != "" {
 		log = func(format string, args ...any) { debugf(env, "tui: "+format, args...) }
 	}
-	choice, err := runFinder(h, q, *out != "", log)
+	choice, err := runFinder(h, q, *out != "", log, tl)
+	if tl != nil {
+		timingf(env, "timing (go): %s", tl)
+	}
 	if err != nil {
 		debugf(env, "finder failed: %v", err)
 		fmt.Fprintln(stderr, "hit:", err)
@@ -100,9 +116,12 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 // With --out the result goes to that file, so the finder can draw on stdout, which is the
 // stream terminals handle best. Without it the result goes to stdout, so the finder draws
 // on stderr instead to keep stdout parseable.
-func runFinder(h *store.History, q search.Query, hasOut bool, log func(string, ...any)) (*tui.Choice, error) {
+func runFinder(h *store.History, q search.Query, hasOut bool, log func(string, ...any),
+	tl *timing.Timeline) (*tui.Choice, error) {
 	m := tui.New(h, q)
+	tl.Mark("rank")
 	m.Log = log
+	m.Timing = tl
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	if !hasOut {
 		opts = append(opts, tea.WithOutput(os.Stderr))

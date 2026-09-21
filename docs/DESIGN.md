@@ -432,3 +432,49 @@ hit must feel the same everywhere and must not fight other tools for keys.
 - **Inline mode** (draw N lines under the prompt) vs **full-screen** (alternate screen) is
   configurable. In a small Zellij pane, inline is usually nicer (F-020).
 - Layout adapts to pane size: preview beside the list when wide, below when narrow, hidden when tiny.
+
+## 15. Measuring recall latency
+
+Recall is the one interaction that must feel instant (principle 1), and when it doesn't,
+the cause is usually not in hit. The finder spans two processes, so neither side can see
+the whole of it: the shell knows when it called `Process.Start` but not when the binary
+began running, and the binary knows when it began but not when it was asked to.
+
+`HIT_TIMING=1` turns on a phase report on both sides, written to `$TEMP\hit-debug.log`
+(the same file as `HIT_DEBUG`, under its own switch so one number doesn't arrive buried
+in every key press). The finder also draws its report in the status area, because the
+number you want is usually the one for the recall you just did.
+
+The shell stamps the clock as it spawns the binary and passes it as `--started-at`
+(unix ms). The binary compares that with its own package initialisation, so the first
+phase it reports is **process creation** — the loader, the Go runtime, and on a managed
+machine whatever inspects the binary before it is allowed to run. That phase belongs to
+neither side's code and is invisible without the handoff.
+
+Phases, in order:
+
+| Side | Phase | What it covers |
+|---|---|---|
+| pwsh | `temp` | the handoff temp file being created |
+| pwsh | `buffer` | reading the prompt buffer out of PSReadLine |
+| go | `spawn` | `Process.Start` → the binary's package init (process creation) |
+| go | `init` | flag parse and path resolution |
+| go | `read` | reading the JSONL history off disk |
+| go | `build` | merging records into entries |
+| go | `rank` | the first search |
+| go | `paint` | the first frame |
+| pwsh | `run` | the whole finder session — *includes* your time looking at it |
+| pwsh | `readback` | reading and parsing the chosen command |
+| pwsh | `redraw` | putting the prompt back |
+
+`hit search --print --started-at <unix-ms>` reports the same phases with no TUI at all,
+which isolates process creation from anything terminal-related.
+
+Timing is off unless `HIT_TIMING` is set, and off means a nil timeline on the Go side and
+a `$null` one in pwsh — both no-ops, so the hot path carries no checks and no cost.
+
+**Measured 2026-09-21** (Ryzen 7950X, no endpoint security): a day's history — 70 commands,
+380 lines, 46 KB — costs ~1 ms of an ~8 ms total, and 24.6k lines costs 37 ms. `tui.New`
+plus the first `View` is 38 µs. History size is therefore not a plausible cause of a slow
+recall at any size the owner will reach this decade (§4.4). A cold `spawn` measured 206 ms
+against 8 ms warm on that machine, which is the phase worth suspecting first elsewhere.

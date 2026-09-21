@@ -307,10 +307,58 @@ $script:HitEditor = @{
 # failure can never break the prompt, which also hides them: this is how we get them back.
 function Write-HitDebug([string]$Message) {
     if (-not $env:HIT_DEBUG) { return }
+    Add-HitLogLine $Message
+}
+
+# The same log under the other switch: HIT_TIMING is for one number, and should not
+# oblige you to wade through every key press to find it.
+function Write-HitTiming([string]$Message) {
+    if (-not $env:HIT_TIMING) { return }
+    Add-HitLogLine $Message
+}
+
+function Add-HitLogLine([string]$Message) {
     try {
         Add-Content -LiteralPath (Join-Path ([System.IO.Path]::GetTempPath()) 'hit-debug.log') `
             -Value ('{0:HH:mm:ss.fff}  {1}' -f (Get-Date), $Message)
     } catch { }
+}
+
+# ---------------------------------------------------------------------------------------
+# Phase timings (S-024). On with HIT_TIMING. Stopwatch ticks, so a clock change mid-recall
+# cannot bend the numbers. The shell can only see its own half: the gap between
+# Process.Start and the binary running is reported by the binary itself, which is why it
+# is told when it was spawned (--started-at). See DESIGN §15.
+# ---------------------------------------------------------------------------------------
+
+function New-HitTimeline {
+    if (-not $env:HIT_TIMING) { return $null }
+    [pscustomobject]@{
+        Start = [System.Diagnostics.Stopwatch]::GetTimestamp()
+        Marks = [System.Collections.Generic.List[object]]::new()
+    }
+}
+
+function Add-HitMark($Timeline, [string]$Name) {
+    if (-not $Timeline) { return }
+    $Timeline.Marks.Add([pscustomobject]@{
+            Name = $Name; At = [System.Diagnostics.Stopwatch]::GetTimestamp()
+        })
+}
+
+# The one-line report, each phase measured from the one before it.
+function Format-HitTimeline($Timeline) {
+    if (-not $Timeline -or $Timeline.Marks.Count -eq 0) { return '' }
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $prev = $Timeline.Start
+    foreach ($m in $Timeline.Marks) {
+        $ms = [System.Diagnostics.Stopwatch]::GetElapsedTime($prev, $m.At).TotalMilliseconds
+        $parts.Add(('{0} {1:F0}' -f $m.Name, $ms))
+        $prev = $m.At
+    }
+    $total = [System.Diagnostics.Stopwatch]::GetElapsedTime($Timeline.Start, $prev).TotalMilliseconds
+    $parts.Add(('total {0:F0}' -f $total))
+    ($parts -join ' · ') + ' ms'
 }
 
 # Runs the binary and waits. Replaced in tests by one that writes a canned choice.
@@ -334,28 +382,46 @@ $script:HitRunner = {
 
 # Builds the argument list for `hit search`. Pure, so tests can check it.
 function New-HitSearchArguments {
-    param([string]$Query, [string]$OutFile, [string]$Scope = 'all')
-    @(
-        'search'
-        '--query', $Query
-        '--out', $OutFile
-        '--scope', $Scope
-        '--cwd', (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
-        '--session', $script:HitSessionId
-        '--host', $script:HitHostName
-        '--shell', 'pwsh'
+    param(
+        [string]$Query, [string]$OutFile, [string]$Scope = 'all',
+        # Unix ms at the moment we spawn the binary. 0 leaves the flag off entirely, so
+        # nothing changes when timing is off.
+        [long]$StartedAt = 0
     )
+    $a = [System.Collections.Generic.List[string]]::new()
+    $a.AddRange([string[]]@(
+            'search'
+            '--query', $Query
+            '--out', $OutFile
+            '--scope', $Scope
+            '--cwd', (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+            '--session', $script:HitSessionId
+            '--host', $script:HitHostName
+            '--shell', 'pwsh'
+        ))
+    if ($StartedAt -gt 0) { $a.AddRange([string[]]@('--started-at', [string]$StartedAt)) }
+    , $a.ToArray()
 }
 
 # Ctrl+R: open the finder seeded with what's already typed, then replace the buffer with
 # whatever comes back. Esc in the finder leaves the prompt untouched.
 function Invoke-HitFinder {
+    # Marked before anything else so "temp" covers the temp-file create: on a machine that
+    # scans file creation, that call is not free, and it is the first thing we do.
+    $timeline = New-HitTimeline
     $out = [System.IO.Path]::GetTempFileName()
+    Add-HitMark $timeline 'temp'
     try {
         $query = & $script:HitEditor.GetBuffer
-        $arguments = New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope
+        Add-HitMark $timeline 'buffer'
+        $startedAt = if ($timeline) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { 0 }
+        $arguments = New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope `
+            -StartedAt $startedAt
         Write-HitDebug ("run: {0} {1}" -f $script:HitExe, ($arguments -join ' '))
         $code = & $script:HitRunner $arguments
+        # "run" spans the whole finder session, so it includes however long you spent
+        # looking at it. The binary reports its own spawn-to-first-paint separately.
+        Add-HitMark $timeline 'run'
         Write-HitDebug "exit: $code"
         if ($code -ne 0) { return }
         $choice = $null
@@ -366,6 +432,7 @@ function Invoke-HitFinder {
         } else {
             Write-HitDebug "no out file"
         }
+        Add-HitMark $timeline 'readback'
         if ($choice -and $choice.action -in @('insert', 'edit') -and $choice.cmd) {
             & $script:HitEditor.SetBuffer $choice.cmd
         }
@@ -375,6 +442,10 @@ function Invoke-HitFinder {
     } finally {
         Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
         & $script:HitEditor.Redraw
+        Add-HitMark $timeline 'redraw'
+        if ($report = Format-HitTimeline $timeline) {
+            Write-HitTiming "timing (pwsh): $report"
+        }
     }
 }
 
