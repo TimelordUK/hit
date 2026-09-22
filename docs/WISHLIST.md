@@ -3,7 +3,12 @@
 Every idea goes here, however wild. We refine them by using the tool.
 
 **IDs:** `C-` core (Go binary, storage, search engine) · `S-` shell integration (pwsh, zsh) ·
-`F-` user-facing features and UX. IDs are permanent. Don't renumber; mark items dropped instead.
+`F-` user-facing features and UX · `T-` the finder's own layout, keys and chrome.
+IDs are permanent. Don't renumber; mark items dropped instead.
+
+`T-` was split out of `F-` once the finder grew enough to have its own questions (what a row
+shows, where the preview sits, how you move around it). Finder items already filed under `F-`
+stay there — IDs never move — so look in both when hunting for prior art.
 
 **Milestones:** `M1` daily-drivable in pwsh · `M2` navigation + guards · `M3` zsh · `later` · `?` undecided
 
@@ -109,3 +114,12 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-023 | Drop-in `cd` like `zoxide --cmd cd`: a real path → Set-Location, otherwise jump to the best frecency match; `cdi` interactive. Replaces zoxide (and ZLocation) | M2 | idea |
 | F-024 | Retrospective lock: mark a command in the finder as guarded, so sending it (or a match) again asks for confirmation first. Per-command guards built on F-010/C-013 | M2 | idea |
 | F-025 | navi-style expansion: a short alias expands in place at the prompt into a stored (multi-line) command, with placeholders to fill in. Aliases in config or as tagged history entries (F-014) | later | idea |
+
+## TUI (the finder)
+
+| ID | Item | MS | Status |
+|---|---|---|---|
+| T-001 | Show each command's time in the list itself, not only in the preview, so a run can be placed against the working day without moving the cursor onto it. Needs a column that survives a narrow pane (drop it before the command text is squeezed) and a decision on relative (`14:32`, `2d`) vs absolute | M1 | idea |
+| T-002 | Time filter in the finder: today / this week / since a date. Pairs with T-001 — once the time is visible, wanting to narrow by it follows. Decide whether it is a cycling toggle like `^x`, a scope-style cycle, or typed into the query (`>today`) | M1 | idea |
+| T-003 | Preview placement: expand the selected row **inline** rather than in a fixed pane at the bottom. With a full list the eye has to travel to the foot of the screen and back to read a command it is already sitting on. Undecided — inline costs a stable layout (rows move as you scroll) and complicates the `⏎ +N` marker. Prototype both and pick by using them (F-020 covers the inline/full-screen frame; this is about where the *command body* goes) | M1 | idea |
+| T-004 | Vim-style movement in the finder: `gg` / `G` for top and bottom, and whatever else earns its place (`d`/`u` half-page?). The owner runs PSReadLine in vi edit mode, so the muscle memory is already there. Must not eat the filter: these are only movement keys while the query is empty, or behind a leader (F-022) | M1 | idea |

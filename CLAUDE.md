@@ -2,7 +2,8 @@
 
 - Read `docs/DESIGN.md` before changing behaviour; keep it in sync when decisions change.
 - New ideas go in `docs/WISHLIST.md` with the next free ID in their category (`C-` core,
-  `S-` shell, `F-` feature). Never renumber; mark items `dropped` instead of deleting them.
+  `S-` shell, `F-` feature, `T-` finder layout/keys/chrome). Never renumber; mark items
+  `dropped` instead of deleting them. Finder items predating `T-` stay under `F-`.
 - Reference wishlist IDs in commit messages (e.g. `C-001: tolerant JSONL reader`).
 - The stored command is never modified. Formatting is a view or insert option only.
 - Nothing on the prompt hot path may spawn a process, touch the network, or stat a remote path.
