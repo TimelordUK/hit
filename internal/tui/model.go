@@ -207,7 +207,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor, m.top = 0, 0
 		m.refresh()
 	default:
-		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+		// Alt chords belong to the shell (Alt+M is the prompt's one-line/many-lines
+		// toggle). They arrive here as ordinary runes, so without this they get typed
+		// into the filter and the key looks like it did nothing at all.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && !msg.Alt {
 			m.query.Text += string(msg.Runes)
 			m.cursor, m.top = 0, 0
 			m.refresh()

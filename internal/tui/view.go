@@ -124,12 +124,53 @@ func (m Model) statusLine() string {
 	return truncate(pos, m.width)
 }
 
-// renderRow shows the first line of a command with the matched runes highlighted,
-// and a ⏎ +N marker when there are more lines (DESIGN §6).
+// rowLabel is the one-line form of a command for the list.
+//
+// A multi-line command is flattened — every run of whitespace becomes one space — because
+// its first line is so often a bare opener (`& {`, `foreach ($x in $y) {`) that every
+// command of that shape renders identically and the list becomes unreadable. A single-line
+// command is returned exactly as it is: the view may reformat (principle 3), but there is
+// nothing to gain by collapsing spaces inside a command that already fits on one line.
+//
+// The second return is, for each rune of the label, the index of the rune it came from in
+// cmd, so the match highlighting still lands on the right characters — including matches
+// on lines that the old first-line-only row could never show.
+func rowLabel(cmd string) ([]rune, []int) {
+	runes := []rune(cmd)
+	if !strings.ContainsAny(cmd, "\n\r\t") {
+		src := make([]int, len(runes))
+		for i := range src {
+			src[i] = i
+		}
+		return runes, src
+	}
+	out := make([]rune, 0, len(runes))
+	src := make([]int, 0, len(runes))
+	inGap := true // starts true, so leading whitespace is dropped rather than shown
+	for i, r := range runes {
+		if r == '\n' || r == '\r' || r == '\t' || r == ' ' {
+			if !inGap {
+				out = append(out, ' ')
+				src = append(src, i)
+				inGap = true
+			}
+			continue
+		}
+		out = append(out, r)
+		src = append(src, i)
+		inGap = false
+	}
+	if n := len(out); n > 0 && out[n-1] == ' ' {
+		out, src = out[:n-1], src[:n-1]
+	}
+	return out, src
+}
+
+// renderRow shows a command on one line with the matched runes highlighted, and a ⏎ +N
+// marker when it spans more (DESIGN §6).
 func (m Model) renderRow(s styles, i int) string {
 	r := m.results[i]
-	lines := strings.Split(r.Entry.Cmd, "\n")
-	first := []rune(strings.TrimRight(lines[0], "\r"))
+	label, src := rowLabel(r.Entry.Cmd)
 
 	inMatch := map[int]bool{}
 	for _, p := range r.Matched {
@@ -140,25 +181,42 @@ func (m Model) renderRow(s styles, i int) string {
 	if i == m.cursor {
 		prefix = "▸ "
 	}
-	width := max(10, m.width-4)
+	// The markers are what the row is *for* once it no longer fits, so they are measured
+	// first and the command gets the room that is left. Flattened labels are long enough
+	// that appending these afterwards would run the row past the pane.
+	var marker, count string
+	if n := strings.Count(r.Entry.Cmd, "\n"); n > 0 {
+		marker = " " + fmt.Sprintf("⏎ +%d", n)
+	}
+	if r.Count > 1 {
+		count = fmt.Sprintf("  ×%d", r.Count)
+	}
+	width := max(10, m.width-lipgloss.Width(prefix)-lipgloss.Width(marker)-lipgloss.Width(count))
+
+	// The ellipsis costs a column of its own, so it comes out of the label's room.
+	clipped := false
+	if len(label) > width {
+		n := max(0, width-1)
+		label, src, clipped = label[:n], src[:n], true
+	}
+
 	var b strings.Builder
 	b.WriteString(prefix)
-	for j, ru := range first {
-		if j >= width {
-			b.WriteString(s.dim.Render("…"))
-			break
-		}
-		if inMatch[j] {
+	for j, ru := range label {
+		if inMatch[src[j]] {
 			b.WriteString(s.match.Render(string(ru)))
 		} else {
 			b.WriteString(string(ru))
 		}
 	}
-	if n := len(lines) - 1; n > 0 {
-		b.WriteString(" " + s.marker.Render(fmt.Sprintf("⏎ +%d", n)))
+	if clipped {
+		b.WriteString(s.dim.Render("…"))
 	}
-	if r.Count > 1 {
-		b.WriteString(s.meta.Render(fmt.Sprintf("  ×%d", r.Count)))
+	if marker != "" {
+		b.WriteString(s.marker.Render(marker))
+	}
+	if count != "" {
+		b.WriteString(s.meta.Render(count))
 	}
 	line := b.String()
 	if i == m.cursor {

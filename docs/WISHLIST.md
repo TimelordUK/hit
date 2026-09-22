@@ -74,6 +74,8 @@ Every idea goes here, however wild. We refine them by using the tool.
 | S-026 | If `spawn` turns out to own the recall time on a managed machine: keep one warm `hit` process per shell session rather than spawning per Ctrl+R. Weigh against principle 2 (no daemon) — a per-session child is not a service, but it is close enough to need a decision | M2 | idea |
 | S-022 | `scripts/install.ps1`: build + install with version stamped; `-Clear` moves the current history into `backup\` (dogfooding: start clean each reinstall) | M1 | done |
 | S-024 | `HIT_TIMING` phase timings in `Invoke-HitFinder` (DESIGN §15): temp-file create, buffer read, the run, read-back and redraw, plus `--started-at` so the binary can report process creation. Ctrl+R felt like 2.5–3 s on an AV-heavy work machine while the Go side is ~8 ms — this says which phase owns it | M1 | done |
+| S-027 | Alt+M: let `Join-HitCommand` collapse statements by inserting `;`, so `& {` blocks and other multi-statement commands can come back onto one line. Today it refuses them ("it is more than one statement") because DESIGN §7 classes adding a separator as a rewrite. Needs the token-equality check extended to accept a `Semi` standing exactly where a `NewLine` was, and a corpus case per context where the two are *not* equivalent — this is the "spend real time on the parser" item | M1 | idea |
+| S-028 | Alt+M round-trip corpus: for every command in `tests/corpus/pwsh/`, assert split-then-join returns the original text, so the two directions cannot drift apart | M1 | idea |
 | S-025 | Stop using `[System.IO.Path]::GetTempFileName()` for the finder handoff: it creates a file in `%TEMP%`, which corporate AV scans on every Ctrl+R, and the Win32 call linear-probes for a free name as `%TEMP%` fills over a day. Use one fixed per-session path (or a pipe / stdout handoff) instead. Blocked on S-024 confirming it matters: read the `temp` phase | M1 | idea |
 
 ## Features / UX
@@ -99,6 +101,8 @@ Every idea goes here, however wild. We refine them by using the tool.
 | F-017 | Guard conditions on time/day (extra-strict before 10:00 on a Monday) | later | idea |
 | F-018 | Keymap from `config.toml`, no hard-coded keys | M1 | planned |
 | F-019 | `hit doctor`: detect Zellij/tmux/WT/WSL/msys2, report key clashes and setup problems | M2 | idea |
+| F-026 | Finder rows show the command flattened onto one line, not just its first line: a block starting `& {` rendered as `& {` and nothing else, so every command of that shape looked identical. Match highlighting maps back to the original offsets, so matches on later lines now show too | M1 | done |
+| F-027 | Finder ignores Alt chords instead of typing them into the filter: Alt+M in the finder was silently narrowing the list to whatever matched "m", so the key looked dead and quietly did the wrong thing | M1 | done |
 | F-020 | Inline vs full-screen mode (still full-screen); layout adapts to pane size (done) | M1 | doing |
 | F-021 | Shell-family filter by default; WSL/msys2/Windows path translation in dir finder | M3 | idea |
 | F-022 | Leader key inside the finder, only if clashes pile up | ? | idea |

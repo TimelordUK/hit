@@ -216,8 +216,20 @@ Matching is smart-case subsequence, scored on contiguity, word boundaries, span 
 early it starts. Duplicates collapse into one result with a run count; the directory and
 session bonuses look at every run of that command, not just the latest.
 
-- **Multi-line is first class**: the list shows the first line with a `⏎ +3` marker, and a
-  preview pane shows the full command, syntax-highlighted.
+- **Multi-line is first class**: the list shows the command flattened onto one line with a
+  `⏎ +3` marker, and a preview pane shows it in full.
+
+  The row used to show the *first line only*, which failed on exactly the commands worth
+  recalling: a block starting `& {` or `foreach ($x in $y) {` renders as that opener and
+  nothing else, so every command of that shape looks identical when you glance down the
+  list. Flattening collapses each run of whitespace to one space and keeps a map back to
+  the original rune offsets, so match highlighting still lands correctly — and matches on
+  later lines, which the old row could never show, now appear. Single-line commands are
+  left byte for byte: the view may reformat (principle 3), but not gratuitously.
+
+- **Alt chords are not typed into the filter.** They belong to the shell (Alt+M is the
+  prompt's one-line/many-lines toggle) and arrive as ordinary runes, so the finder must
+  drop them explicitly or the key silently filters instead of doing nothing.
 - **Ranking:** match quality × recency × frequency, boosted for same directory and
   successful exit. Duplicates collapse into one entry showing a run count and last-run time.
 
