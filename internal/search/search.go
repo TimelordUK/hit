@@ -183,59 +183,96 @@ func bonus(r Result) float64 {
 }
 
 // Match scores pattern against text and returns the rune indexes that matched.
+//
 // Matching is a subsequence match, smart-case (an upper-case rune in the pattern makes
 // that match case-sensitive), scoring contiguous runs and matches at word boundaries
 // higher. An empty pattern matches everything with a neutral score.
+//
+// A pattern opening with a single quote is matched literally instead: `'hit` wants the
+// three runes together. Subsequence matching is loose by design, and on a real history
+// that shows — `hit` finds `Get-History`, `Get-ChildItem` and `Push-Location`, because
+// each carries h, i and t in that order. The quote is fzf's, where `'wild` is an
+// exact-substring term (C-030). A quote anywhere else is an ordinary character, which
+// matters because commands are full of them.
 func Match(text, pattern string) (score float64, matched []int, ok bool) {
 	if pattern == "" {
 		return 1, nil, true
 	}
 	runes := []rune(text)
+	if lit, isLiteral := strings.CutPrefix(pattern, "'"); isLiteral {
+		return matchLiteral(runes, []rune(lit))
+	}
 	pat := []rune(pattern)
 
 	matched = make([]int, 0, len(pat))
 	pi := 0
-	var (
-		run       float64 // length of the current contiguous run
-		total     float64
-		firstAt   = -1
-		prevIndex = -2
-	)
 	for i := 0; i < len(runes) && pi < len(pat); i++ {
 		if !runeMatch(runes[i], pat[pi]) {
 			continue
 		}
-		if firstAt < 0 {
-			firstAt = i
-		}
-		if i == prevIndex+1 {
-			run++
-		} else {
-			run = 1
-		}
-		s := 1.0 + run // contiguous matches are worth more
-		if i == 0 || isBoundary(runes[i-1]) {
-			s += 2 // start of a word: "irm" in "… | irm" beats "… iRM …"
-		}
-		if runes[i] == pat[pi] {
-			s += 0.5 // exact case
-		}
-		total += s
 		matched = append(matched, i)
-		prevIndex = i
 		pi++
 	}
 	if pi < len(pat) {
 		return 0, nil, false
 	}
+	return scoreMatched(runes, pat, matched), matched, true
+}
 
+// matchLiteral finds pat as a run of adjacent runes. The earliest occurrence wins, which
+// is also the best-scoring one: scoreMatched rewards a match that starts early.
+func matchLiteral(runes, pat []rune) (float64, []int, bool) {
+	if len(pat) == 0 {
+		return 1, nil, true // a lone quote: the term is still being typed
+	}
+	for start := 0; start+len(pat) <= len(runes); start++ {
+		hit := true
+		for j := range pat {
+			if !runeMatch(runes[start+j], pat[j]) {
+				hit = false
+				break
+			}
+		}
+		if !hit {
+			continue
+		}
+		matched := make([]int, len(pat))
+		for j := range pat {
+			matched[j] = start + j
+		}
+		return scoreMatched(runes, pat, matched), matched, true
+	}
+	return 0, nil, false
+}
+
+// scoreMatched turns matched positions into a score. Both matchers hand their positions
+// here, so a literal match and a fuzzy one that land on the same runes are worth exactly
+// the same and neither mode is quietly favoured in the ranking.
+func scoreMatched(runes, pat []rune, matched []int) float64 {
+	var total, run float64
+	prevIndex := -2
+	for k, i := range matched {
+		if i == prevIndex+1 {
+			run++ // contiguous matches are worth more
+		} else {
+			run = 1
+		}
+		s := 1.0 + run
+		if i == 0 || isBoundary(runes[i-1]) {
+			s += 2 // start of a word: "irm" in "… | irm" beats "… iRM …"
+		}
+		if runes[i] == pat[k] {
+			s += 0.5 // exact case
+		}
+		total += s
+		prevIndex = i
+	}
 	// Normalise so long commands aren't penalised for their length, then reward matches
 	// that start early and span a short stretch of the text.
 	span := float64(matched[len(matched)-1]-matched[0]) + 1
 	density := float64(len(pat)) / span
-	early := 1.0 / (1.0 + float64(firstAt)/40)
-	score = (total / (float64(len(pat)) * 3.5)) * (0.5 + density) * early
-	return score, matched, true
+	early := 1.0 / (1.0 + float64(matched[0])/40)
+	return (total / (float64(len(pat)) * 3.5)) * (0.5 + density) * early
 }
 
 func runeMatch(text, pat rune) bool {

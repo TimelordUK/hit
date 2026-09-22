@@ -45,10 +45,7 @@ func (m Model) View() string {
 		m.Timing.Mark("paint")
 	}
 	s := newStyles()
-	now := m.query.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
+	now := m.clock()
 
 	var b strings.Builder
 	// The search line: a prompt, what you've typed, a cursor, and how many commands match,
@@ -61,6 +58,9 @@ func (m Model) View() string {
 		right += " matches"
 	}
 	right += "  " + string(m.query.Scope)
+	if strings.HasPrefix(m.query.Text, "'") {
+		right += "  literal" // named, not left to be inferred from the quote (T-005)
+	}
 	if m.query.HideFailed {
 		right += "  ok-only"
 	}
@@ -166,8 +166,49 @@ func rowLabel(cmd string) ([]rune, []int) {
 	return out, src
 }
 
-// renderRow shows a command on one line with the matched runes highlighted, and a ⏎ +N
-// marker when it spans more (DESIGN §6).
+// timeColWidth is the width of the time column, and of the blank that stands in for an
+// entry with no usable timestamp so the commands still line up. timeColMinWidth is the
+// pane width below which the column is dropped rather than squeezing the command.
+const (
+	timeColWidth    = 6
+	timeColMinWidth = 40
+)
+
+// timeColumn is when a command was run, in one fixed-width column (T-001).
+//
+// Today shows the clock, because the job is to place a run against the working day — "did
+// I run this before or after the deploy?" — and a relative age ("3h ago") answers that
+// worse the longer the day goes on. Any other day shows the date instead: the exact minute
+// stopped mattering, and which day it was started to.
+func timeColumn(t, now time.Time) string {
+	if t.IsZero() {
+		return strings.Repeat(" ", timeColWidth)
+	}
+	t = t.In(now.Location())
+	layout := "02 Jan"
+	if sameDay(t, now) {
+		layout = "15:04"
+	}
+	return fmt.Sprintf("%*s", timeColWidth, t.Format(layout))
+}
+
+// clock is "now" for the view: pinned by the query in tests, the real clock otherwise.
+// The row and the preview take it from here so they can never disagree about the day.
+func (m Model) clock() time.Time {
+	if !m.query.Now.IsZero() {
+		return m.query.Now
+	}
+	return time.Now()
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// renderRow shows a command on one line with the matched runes highlighted, when it was
+// run, and a ⏎ +N marker when it spans more lines (DESIGN §6).
 func (m Model) renderRow(s styles, i int) string {
 	r := m.results[i]
 	label, src := rowLabel(r.Entry.Cmd)
@@ -191,7 +232,14 @@ func (m Model) renderRow(s styles, i int) string {
 	if r.Count > 1 {
 		count = fmt.Sprintf("  ×%d", r.Count)
 	}
-	width := max(10, m.width-lipgloss.Width(prefix)-lipgloss.Width(marker)-lipgloss.Width(count))
+	// The time is the first thing dropped when the pane narrows: it is context, and the
+	// command is the thing you came for (T-001).
+	stamp := ""
+	if m.width >= timeColMinWidth {
+		stamp = timeColumn(r.Entry.Time, m.clock()) + "  "
+	}
+	width := max(10, m.width-lipgloss.Width(prefix)-lipgloss.Width(stamp)-
+		lipgloss.Width(marker)-lipgloss.Width(count))
 
 	// The ellipsis costs a column of its own, so it comes out of the label's room.
 	clipped := false
@@ -202,6 +250,9 @@ func (m Model) renderRow(s styles, i int) string {
 
 	var b strings.Builder
 	b.WriteString(prefix)
+	if stamp != "" {
+		b.WriteString(s.meta.Render(stamp))
+	}
 	for j, ru := range label {
 		if inMatch[src[j]] {
 			b.WriteString(s.match.Render(string(ru)))

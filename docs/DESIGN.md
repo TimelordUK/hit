@@ -209,12 +209,30 @@ tests replace with a fake, so handlers run with no keyboard (DESIGN §13.1).
 | Del / Ctrl+Z | tombstone the selection / undo, while the finder is open |
 | Esc / Ctrl+C | cancel, prompt untouched |
 
+**Matching modes.** A bare query is a smart-case subsequence. A query opening with a single
+quote is matched *literally* — `'hit` wants those three runes adjacent. Subsequence matching
+is loose by design, and on a real history that shows: `hit` also finds `Get-History`,
+`Get-ChildItem` and `Push-Location`, each carrying h, i and t in that order. The quote is
+fzf's, where `'wild` is an exact-substring term, so the habit transfers; a quote anywhere
+else in the query is an ordinary character, which matters because commands are full of them.
+Both modes hand their matched positions to one scoring function, so neither is quietly
+favoured in the ranking (C-030). The header names the mode, rather than leaving it to be
+inferred from a character that is easy to miss.
+
 **Ranking** (`internal/search`, golden-tested): match quality × frequency (log, so a command
 run 500 times doesn't bury one run twice) × recency (halves every 7 days, with a floor) ×
 bonuses for this directory (1.5), this session (1.2) and a penalty for a failed exit (0.7).
 Matching is smart-case subsequence, scored on contiguity, word boundaries, span and how
 early it starts. Duplicates collapse into one result with a run count; the directory and
 session bonuses look at every run of that command, not just the latest.
+
+- **Each row carries its time** in a fixed-width column on the left, dimmed so it reads as
+  context rather than as part of the command. Today shows the clock, because the job is to
+  place a run against the working day — *did I run this before or after the deploy?* — which
+  a relative age answers worse the longer the day goes on. Any other day shows the date: the
+  minute has stopped mattering and the day has started to. An entry with no usable timestamp
+  gets a blank of the same width, so the commands stay in one column. Below a narrow pane the
+  time is dropped rather than squeezing the command, which is the thing you came for (T-001).
 
 - **Multi-line is first class**: the list shows the command flattened onto one line with a
   `⏎ +3` marker, and a preview pane shows it in full.
