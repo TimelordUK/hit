@@ -24,12 +24,27 @@ type Span struct {
 // the uninstrumented path costs nothing and callers need no checks.
 type Timeline struct {
 	start time.Time
+	via   string
 	names []string
 	ats   []time.Time
 }
 
 // New starts a timeline at t.
 func New(t time.Time) *Timeline { return &Timeline{start: t} }
+
+// NewVia starts a timeline at t and records how the finder was reached — "pipe" when a
+// resident server drew it, "spawn" when a process was started for it. That is the one
+// thing the phases cannot say for themselves: a served run simply has no spawn phase,
+// and an absence is easy to misread as a fast one.
+func NewVia(t time.Time, via string) *Timeline { return &Timeline{start: t, via: via} }
+
+// Via is how the finder was reached, or "" when nobody said.
+func (t *Timeline) Via() string {
+	if t == nil {
+		return ""
+	}
+	return t.via
+}
 
 // Mark records that the named phase finished now.
 func (t *Timeline) Mark(name string) { t.MarkAt(name, time.Now()) }
@@ -81,12 +96,15 @@ func (t *Timeline) Total() time.Duration {
 	return t.ats[len(t.ats)-1].Sub(t.start)
 }
 
-// String is the one-line report: "spawn 2841 · read 2 · total 2843 ms".
+// String is the one-line report: "via spawn · spawn 2841 · read 2 · total 2843 ms".
 func (t *Timeline) String() string {
 	if t == nil || len(t.names) == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(t.names)+1)
+	parts := make([]string, 0, len(t.names)+2)
+	if t.via != "" {
+		parts = append(parts, "via "+t.via)
+	}
 	for _, s := range t.Spans() {
 		parts = append(parts, fmt.Sprintf("%s %d", s.Name, Millis(s.D)))
 	}

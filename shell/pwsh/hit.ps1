@@ -253,6 +253,9 @@ function Enable-Hit {
     Register-HitHistoryHandler
     Register-HitPrompt
     Register-HitKeyHandlers
+    if ($env:HIT_SERVER) {
+        Enable-HitServer -Idle ($env:HIT_SERVER_IDLE ? $env:HIT_SERVER_IDLE : '30m')
+    }
 }
 
 # Stops recording and puts back the handler and prompt hit wrapped.
@@ -270,6 +273,7 @@ function Disable-Hit {
     $script:HitHandler = $null
     $script:HitPromptWrapper = $null
     $script:HitPending = $null
+    $script:HitServerMode = $false
     if ($script:HitKeysBound) { Remove-HitKeyHandlers }
 }
 
@@ -403,27 +407,151 @@ function New-HitSearchArguments {
     , $a.ToArray()
 }
 
-# Ctrl+R: open the finder seeded with what's already typed, then replace the buffer with
-# whatever comes back. Esc in the finder leaves the prompt untouched.
-function Invoke-HitFinder {
-    # Marked before anything else so "temp" covers the temp-file create: on a machine that
-    # scans file creation, that call is not free, and it is the first thing we do.
-    $timeline = New-HitTimeline
-    $out = [System.IO.Path]::GetTempFileName()
-    Add-HitMark $timeline 'temp'
+# ---------------------------------------------------------------------------------------
+# The resident finder (C-031). Opt-in with $env:HIT_SERVER, or Enable-HitServer at any
+# prompt; Disable-HitServer puts it back with no restart, which matters because this sits
+# on Ctrl+R and has to be abandonable the moment it misbehaves.
+#
+# Why: on a managed machine the cost of Ctrl+R is not the search, it is starting a process
+# at all. A binary the endpoint agent has not seen costs seconds on first launch and
+# milliseconds once known, and that verdict is evicted through the day (S-029 measured
+# 3505 ms against 58 ms on the same file). So the process is started once per shell and
+# asked to draw, over a pipe only this account can open.
+#
+# The cold spawn stays as the fallback for every failure, because a finder that cannot
+# be reached must still open (principle 7).
+# ---------------------------------------------------------------------------------------
+
+$script:HitServerMode = $false
+$script:HitServerIdle = '30m'
+$script:HitServerStarted = $false   # we have tried to start one this session
+
+# Must agree with ipc.Name on the Go side; the contract test pins both to the same
+# vectors. Session ids are ULIDs, so in practice this only lower-cases them.
+function Get-HitPipeName([string]$Session = $script:HitSessionId) {
+    $s = ($Session -replace '[^A-Za-z0-9_-]', '')
+    if (-not $s) { $s = 'default' }
+    if ($s.Length -gt 48) { $s = $s.Substring(0, 48) }
+    'hit-' + $s.ToLowerInvariant()
+}
+
+function Enable-HitServer {
+    param([string]$Idle = $script:HitServerIdle)
+    $script:HitServerIdle = $Idle
+    $script:HitServerMode = $true
+    $script:HitServerStarted = $false
+    Write-HitDebug "server: enabled, idle $Idle"
+}
+
+function Disable-HitServer {
+    $script:HitServerMode = $false
+    Write-HitDebug 'server: disabled'
+}
+
+# Starts the resident process. No redirection, so it inherits this console and can draw
+# on it exactly as a spawned finder does. --quiet because anything it printed would land
+# in the middle of the prompt.
+function Start-HitServer {
+    if ($script:HitServerStarted) { return }
+    $script:HitServerStarted = $true
+    if (-not $script:HitExe) { return }
     try {
-        $query = & $script:HitEditor.GetBuffer
-        Add-HitMark $timeline 'buffer'
-        $startedAt = if ($timeline) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { 0 }
-        $arguments = New-HitSearchArguments -Query $query -OutFile $out -Scope $script:HitScope `
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $script:HitExe
+        foreach ($a in @('serve', '--session', $script:HitSessionId, '--idle', $script:HitServerIdle,
+                '--parent', [string]$PID, '--quiet')) {
+            $null = $psi.ArgumentList.Add($a)
+        }
+        $psi.UseShellExecute = $false
+        $null = [System.Diagnostics.Process]::Start($psi)
+        Write-HitDebug "server: started, idle $script:HitServerIdle, parent $PID"
+    } catch {
+        Write-HitDebug ("server start failed: " + $_.Exception.Message)
+    }
+}
+
+# One request/response over the pipe. $Wait means the server is drawing the finder, so
+# the read is unbounded — the same as waiting on a spawned finder, which also takes as
+# long as you look at it. Without it the read is bounded, so a wedged server can never
+# hold the prompt.
+function Invoke-HitServerRequest {
+    param(
+        [Parameter(Mandatory)][hashtable]$Request,
+        [int]$ConnectTimeoutMs = 400,
+        [int]$ReadTimeoutMs = 1500,
+        [switch]$Wait
+    )
+    $pipe = $null
+    try {
+        $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
+            '.', (Get-HitPipeName), [System.IO.Pipes.PipeDirection]::InOut)
+        $pipe.Connect($ConnectTimeoutMs)
+        $json = ConvertTo-Json -InputObject $Request -Compress -Depth 3
+        $bytes = $script:HitUtf8.GetBytes($json + "`n")
+        $pipe.Write($bytes, 0, $bytes.Length)
+        $pipe.Flush()
+
+        $reader = [System.IO.StreamReader]::new($pipe, $script:HitUtf8)
+        $task = $reader.ReadLineAsync()
+        if (-not $Wait) {
+            if (-not $task.Wait($ReadTimeoutMs)) {
+                Write-HitDebug 'server: no answer in time'
+                return $null
+            }
+        }
+        $line = $task.GetAwaiter().GetResult()
+        if (-not $line) { return $null }
+        ConvertFrom-Json $line
+    } catch {
+        Write-HitDebug ("server: " + $_.Exception.Message)
+        $null
+    } finally {
+        if ($pipe) { $pipe.Dispose() }
+    }
+}
+
+# Is there a live server? A ping draws nothing, so this is safe to ask before committing
+# the console to it.
+function Test-HitServer {
+    $res = Invoke-HitServerRequest -Request @{ ping = $true }
+    [bool]($res -and $res.pong)
+}
+
+# Asks the resident process to draw. Returns the choice, or $null to mean "not served" —
+# never throws, so the caller can simply fall through to spawning.
+function Invoke-HitFinderOnServer([string]$Query) {
+    if (-not (Test-HitServer)) { return $null }
+    $res = Invoke-HitServerRequest -Wait -Request @{
+        query   = $Query
+        scope   = $script:HitScope
+        cwd     = (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+        session = $script:HitSessionId
+        host    = $script:HitHostName
+        shell   = 'pwsh'
+    }
+    if (-not $res) { return $null }
+    if ($res.error) {
+        Write-HitDebug ("server error: " + $res.error)
+        return $null
+    }
+    $res
+}
+
+# The original path: spawn the finder and read its answer out of a temp file.
+function Invoke-HitFinderBySpawn([string]$Query, $Timeline) {
+    $out = [System.IO.Path]::GetTempFileName()
+    Add-HitMark $Timeline 'temp'
+    try {
+        $startedAt = if ($Timeline) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { 0 }
+        $arguments = New-HitSearchArguments -Query $Query -OutFile $out -Scope $script:HitScope `
             -StartedAt $startedAt
         Write-HitDebug ("run: {0} {1}" -f $script:HitExe, ($arguments -join ' '))
         $code = & $script:HitRunner $arguments
         # "run" spans the whole finder session, so it includes however long you spent
         # looking at it. The binary reports its own spawn-to-first-paint separately.
-        Add-HitMark $timeline 'run'
+        Add-HitMark $Timeline 'run'
         Write-HitDebug "exit: $code"
-        if ($code -ne 0) { return }
+        if ($code -ne 0) { return $null }
         $choice = $null
         if (Test-Path -LiteralPath $out) {
             $text = [System.IO.File]::ReadAllText($out)
@@ -432,7 +560,34 @@ function Invoke-HitFinder {
         } else {
             Write-HitDebug "no out file"
         }
-        Add-HitMark $timeline 'readback'
+        Add-HitMark $Timeline 'readback'
+        $choice
+    } finally {
+        Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
+    }
+}
+
+# Ctrl+R: open the finder seeded with what's already typed, then replace the buffer with
+# whatever comes back. Esc in the finder leaves the prompt untouched.
+function Invoke-HitFinder {
+    $timeline = New-HitTimeline
+    try {
+        $query = & $script:HitEditor.GetBuffer
+        Add-HitMark $timeline 'buffer'
+
+        $choice = $null
+        if ($script:HitServerMode) {
+            $choice = Invoke-HitFinderOnServer $query
+            Add-HitMark $timeline 'server'
+            if (-not $choice) {
+                # Nothing there, or it would not answer: this recall pays the old price,
+                # and one is started so the next does not.
+                Start-HitServer
+            }
+        }
+        if (-not $choice) {
+            $choice = Invoke-HitFinderBySpawn $query $timeline
+        }
         if ($choice -and $choice.action -in @('insert', 'edit') -and $choice.cmd) {
             & $script:HitEditor.SetBuffer $choice.cmd
         }
@@ -440,7 +595,6 @@ function Invoke-HitFinder {
         # Principle 7: a broken finder must never break the prompt.
         Write-HitDebug ("error: " + ($_ | Out-String))
     } finally {
-        Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
         & $script:HitEditor.Redraw
         Add-HitMark $timeline 'redraw'
         if ($report = Format-HitTimeline $timeline) {

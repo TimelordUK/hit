@@ -63,15 +63,15 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	h := store.Build(recs)
 	tl.Mark("build")
 
-	now, err := clock.FromEnv(env.Getenv)
+	at, err := clockNow(env)
 	if err != nil {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}
-	q := search.Query{
-		Text: *query, Scope: search.Scope(*scope), Cwd: *cwd, Session: *session,
-		Host: *host, Shell: *shell, HideFailed: *okOnly, Limit: *limit, Now: now(),
-	}
+	q := buildQuery(searchArgs{
+		Query: *query, Scope: *scope, Cwd: *cwd, Session: *session,
+		Host: *host, Shell: *shell, OkOnly: *okOnly, Limit: *limit,
+	}, at)
 
 	if *print {
 		enc := json.NewEncoder(stdout)
@@ -105,11 +105,36 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	}
 	debugf(env, "finder returned: action=%s len(cmd)=%d deleted=%d", choice.Action, len(choice.Cmd), len(choice.Deleted))
 	if len(choice.Deleted) > 0 {
-		if err := tombstone(histPath, choice.Deleted, now()); err != nil {
+		if err := tombstone(histPath, choice.Deleted, at); err != nil {
 			fmt.Fprintln(stderr, "hit: could not delete:", err)
 		}
 	}
 	return writeChoice(choice, *out, stdout, stderr)
+}
+
+// searchArgs is one finder invocation, however it arrived: from the flags of
+// `hit search`, or from a request on the pipe of a resident `hit serve`. Both build their
+// search.Query through buildQuery, so the two routes cannot drift apart.
+type searchArgs struct {
+	Query, Scope, Cwd, Session, Host, Shell string
+	OkOnly                                  bool
+	Limit                                   int
+}
+
+func buildQuery(a searchArgs, at time.Time) search.Query {
+	return search.Query{
+		Text: a.Query, Scope: search.Scope(a.Scope), Cwd: a.Cwd, Session: a.Session,
+		Host: a.Host, Shell: a.Shell, HideFailed: a.OkOnly, Limit: a.Limit, Now: at,
+	}
+}
+
+// clockNow is the current time, which HIT_NOW pins for tests.
+func clockNow(env paths.Env) (time.Time, error) {
+	now, err := clock.FromEnv(env.Getenv)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return now(), nil
 }
 
 // runFinder is split out so the TUI is the only part that needs a terminal.

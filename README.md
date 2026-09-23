@@ -146,6 +146,9 @@ timing (go): spawn 2841 · init 0 · read 2 · build 0 · rank 1 · paint 4 · t
 timing (pwsh): temp 11 · buffer 0 · run 3204 · readback 6 · redraw 2 · total 3223 ms
 ```
 
+The first field says how the finder was reached: `via spawn` for a fresh process, or
+`via pipe` when a resident `hit serve` drew it (see below).
+
 `spawn` is process creation — the loader, the Go runtime, and on a managed machine whatever
 scans the binary before it may run. It is measured across both processes, so it is the one
 number neither side could report alone. `run` spans the whole finder session, so it includes
@@ -153,6 +156,28 @@ your own time looking at it.
 
 History size is almost never the answer: 24k lines of history costs ~37 ms to load and rank.
 See [DESIGN §15](docs/DESIGN.md) for what each phase covers.
+
+### If it is still slow: the resident finder
+
+On a managed machine the cost is often not hit at all, but launching *any* unfamiliar
+binary. Measured on one: a file the endpoint agent has not seen costs ~3.5 s on first
+launch and ~58 ms once known, and that verdict is evicted through the day. If your IT can
+exclude the install folder, that fixes it outright. If they can't:
+
+```powershell
+$env:HIT_SERVER = 1              # then open a new terminal
+```
+
+hit then keeps one process per shell and asks it to draw, so the launch cost is paid once
+a session instead of on every Ctrl+R. `Enable-HitServer` / `Disable-HitServer` turn it on
+and off at a prompt with no restart, and `$env:HIT_SERVER_IDLE` sets how long it sticks
+around (default `30m`).
+
+**It is not a service.** No registration, no elevation, no autostart, nothing to uninstall:
+it is a child of your shell, on a pipe only your account can open, and it exits when the
+shell closes or after sitting idle. MSBuild, the C# compiler and gopls all do the same.
+If the server isn't there or won't answer, hit just starts the finder the old way — so the
+worst case is the speed you had before.
 
 ## Settings
 

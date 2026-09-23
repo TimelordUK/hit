@@ -21,11 +21,21 @@ func newTimeline(env paths.Env, startedMs int64) *timing.Timeline {
 		return nil
 	}
 	if startedMs <= 0 {
-		return timing.New(processStart)
+		return timing.NewVia(processStart, "spawn")
 	}
-	tl := timing.New(time.UnixMilli(startedMs))
+	tl := timing.NewVia(time.UnixMilli(startedMs), "spawn")
 	tl.MarkAt("spawn", processStart)
 	return tl
+}
+
+// newServeTimeline times one request drawn by a resident server. It starts when the
+// request arrived, and reports "pipe" so the report says how the finder was reached:
+// a served run has no spawn phase at all, and an absence reads too easily as a fast one.
+func newServeTimeline(env paths.Env) *timing.Timeline {
+	if env.Getenv == nil || env.Getenv("HIT_TIMING") == "" {
+		return nil
+	}
+	return timing.NewVia(time.Now(), "pipe")
 }
 
 // debugf appends a line to $TEMP/hit-debug.log when HIT_DEBUG is set, matching the pwsh

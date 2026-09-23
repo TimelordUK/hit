@@ -26,7 +26,7 @@ $null = New-Module -Name hit -ScriptBlock {
 $script:HitExe = %s
 %s
 Enable-Hit -HistoryPath %s
-Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder
+Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer
 } | Import-Module -Global
 `, version, psQuote(exe), pwshScript, psQuote(historyPath))
 	return err

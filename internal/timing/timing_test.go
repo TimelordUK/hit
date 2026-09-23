@@ -110,3 +110,29 @@ func TestSubMillisecondPhasesRoundToZeroButStillAppear(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Whether the finder was reached over the pipe or by starting a process is the thing the
+// phases cannot say for themselves: a served run simply has no spawn phase, and an
+// absence reads too easily as a fast one.
+func TestViaIsNamedInTheReport(t *testing.T) {
+	tl := NewVia(epoch, "pipe")
+	tl.MarkAt("read", at(2))
+	if got, want := tl.String(), "via pipe · read 2 · total 2 ms"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if tl.Via() != "pipe" {
+		t.Errorf("Via: got %q", tl.Via())
+	}
+}
+
+func TestViaIsOmittedWhenNobodySaid(t *testing.T) {
+	tl := New(epoch)
+	tl.MarkAt("read", at(2))
+	if got := tl.String(); got != "read 2 · total 2 ms" {
+		t.Errorf("got %q", got)
+	}
+	var nilTL *Timeline
+	if nilTL.Via() != "" {
+		t.Error("a nil timeline should report no route")
+	}
+}

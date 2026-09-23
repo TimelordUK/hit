@@ -508,3 +508,51 @@ a `$null` one in pwsh — both no-ops, so the hot path carries no checks and no 
 plus the first `View` is 38 µs. History size is therefore not a plausible cause of a slow
 recall at any size the owner will reach this decade (§4.4). A cold `spawn` measured 206 ms
 against 8 ms warm on that machine, which is the phase worth suspecting first elsewhere.
+
+## 16. The resident finder
+
+Measured on a managed work machine (S-029): launching a file the endpoint agent has never
+seen costs **~3.5 s**, and ~58 ms once it is known. Ordinary process creation is barely
+taxed (50–124 ms against 11–44 on an unmanaged box). So the cost is per *file*, it is
+cached, and the cache is evicted through the day — which is exactly what Ctrl+R felt like:
+usually fine, sometimes three seconds, worst right after an update. Our own release cadence
+feeds it, because every version shipped is a new unknown file. Excluding the install
+directory would have fixed it outright, but the site allows no exclusions outside system
+paths.
+
+`hit serve` therefore pays that cost once per shell instead of once per recall.
+
+**It is not a service, and the distinction is the point.** No registration, no elevation,
+no autostart, no persistence. It is a child of the shell that started it, on an endpoint
+only that account can open, and it exits when the shell goes away or after sitting idle
+(30 minutes by default). MSBuild's node reuse, VBCSCompiler and gopls are all the same
+shape. Anyone auditing the machine should be able to see that from the source, which is
+why the pipe's DACL is built explicitly from the current user's SID rather than left to a
+default.
+
+**It draws on the console it inherited.** The shell starts it with no redirection, exactly
+as it starts a one-shot finder, so the terminal handling is the same code that has always
+run — only the control channel is new. That channel is a named pipe on Windows (invisible
+to anything enumerating sockets, and PowerShell speaks it natively through
+`NamedPipeClientStream`) and a unix socket elsewhere. No listening port is involved.
+
+Requests are served one at a time. There is one console, so two finders could not both
+draw on it in any case.
+
+**Every failure falls back to spawning.** No server, a server that will not answer, a
+malformed reply, an error in the response: each one drops through to the path that has
+always worked, and the shell starts a server for next time. A ping is bounded so a wedged
+server can never hold the prompt; the draw itself is not, because that takes as long as
+you look at it — which is equally true of the one-shot finder.
+
+It is **opt-in** (`$env:HIT_SERVER`, or `Enable-HitServer` at any prompt) and
+`Disable-HitServer` abandons it with no restart. Something on the Ctrl+R path has to be
+abandonable the moment it misbehaves.
+
+With `HIT_TIMING` on, the finder's report says which route it came by — `via pipe` or
+`via spawn` — because a served run simply has no `spawn` phase, and an absence reads too
+easily as a fast one.
+
+The history file is re-read on every request rather than cached: commands have been
+appended since the last one, and a finder that could not see what you just ran would be
+worse than a slow one.
