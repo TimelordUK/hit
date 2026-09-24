@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -57,6 +58,26 @@ type Response struct {
 	Pong    bool     `json:"pong,omitempty"`
 	Error   string   `json:"error,omitempty"`
 	Version string   `json:"version,omitempty"`
+	// Server describes the process answering, and rides only on a ping reply, so
+	// `hit status` can say what is resident without a second kind of request (C-034).
+	Server *ServerInfo `json:"server,omitempty"`
+}
+
+// ServerInfo is what a resident finder says about itself. Everything in it is something
+// that has been asked about in daily use: which process this is, which shell it belongs
+// to, whether that shell is still there, and whether it is running the binary just
+// installed or the one before.
+type ServerInfo struct {
+	Pid         int       `json:"pid"`
+	Parent      int       `json:"parent,omitempty"`
+	ParentAlive bool      `json:"parentAlive,omitempty"`
+	Session     string    `json:"session,omitempty"`
+	Endpoint    string    `json:"endpoint"`
+	Exe         string    `json:"exe,omitempty"`
+	Started     time.Time `json:"started"`
+	LastUsed    time.Time `json:"lastUsed,omitzero"`
+	Idle        string    `json:"idle"`
+	Requests    int       `json:"requests"`
 }
 
 // handler runs one request. Injected so the serve loop can be tested without a console.
@@ -90,7 +111,13 @@ func runServe(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	}
 	debugf(env, "serve: listening on %s, idle %s, parent %d", ipc.Address(name), *idle, *parent)
 
-	s := &server{ln: ln, idle: *idle, env: env}
+	s := &server{ln: ln, idle: *idle, env: env, info: ServerInfo{
+		Pid: os.Getpid(), Parent: *parent, Session: *session,
+		Endpoint: ipc.Address(name), Started: time.Now(), Idle: idle.String(),
+	}}
+	if exe, err := os.Executable(); err == nil {
+		s.info.Exe = exe
+	}
 	if *parent > 0 {
 		// The parent is pinned now, at startup, while it is certainly still the process
 		// that asked for us. Waiting until the first check would leave a window in which
@@ -101,6 +128,7 @@ func runServe(args []string, env paths.Env, stdout, stderr io.Writer) int {
 			return 0
 		}
 		defer w.close()
+		s.parent = w
 		go s.watchParent(w)
 	}
 	s.run(func(r Request) Response { return s.finder(r) })
@@ -113,10 +141,33 @@ type server struct {
 	idle time.Duration
 	env  paths.Env
 
+	info   ServerInfo   // fixed at startup; the live fields are filled in by status
+	parent *parentWatch // nil when not watching
+
 	mu    sync.Mutex
 	timer *time.Timer
 	why   string
 	done  bool
+	used  time.Time // the last finder request, not the last ping
+	count int
+}
+
+// status answers a ping. A ping resets the idle clock like any caller does, so the time
+// reported is the last *finder* request, which is what "is this thing being used" means.
+func (s *server) status() *ServerInfo {
+	info := s.info
+	s.mu.Lock()
+	info.LastUsed, info.Requests = s.used, s.count
+	s.mu.Unlock()
+	info.ParentAlive = s.parent != nil && s.parent.alive()
+	return &info
+}
+
+func (s *server) served() {
+	s.mu.Lock()
+	s.used = time.Now()
+	s.count++
+	s.mu.Unlock()
 }
 
 // run accepts one caller at a time. Serial by design: there is one console, so two
@@ -186,12 +237,14 @@ func (s *server) serveConn(conn net.Conn, h handler) {
 			return
 		}
 		if req.Ping {
-			if err := enc.Encode(Response{Pong: true, Version: version}); err != nil {
+			if err := enc.Encode(Response{Pong: true, Version: version, Server: s.status()}); err != nil {
 				return
 			}
 			continue
 		}
-		if err := enc.Encode(h(req)); err != nil {
+		res := h(req)
+		s.served()
+		if err := enc.Encode(res); err != nil {
 			return
 		}
 	}

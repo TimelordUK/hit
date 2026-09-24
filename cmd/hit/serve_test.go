@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -51,7 +52,9 @@ func serveInBackground(t *testing.T, idle time.Duration, h handler) (string, *se
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	s := &server{ln: ln, idle: idle}
+	s := &server{ln: ln, idle: idle, info: ServerInfo{
+		Pid: os.Getpid(), Endpoint: ipc.Address(name), Started: time.Now(), Idle: idle.String(),
+	}}
 	stopped := make(chan struct{})
 	go func() { s.run(h); close(stopped) }()
 	t.Cleanup(func() {

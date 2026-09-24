@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // Address is the socket path. XDG_RUNTIME_DIR when there is one (it is already per user
@@ -46,4 +48,27 @@ func Dial(name string) (net.Conn, error) {
 		return nil, ErrNoServer
 	}
 	return c, nil
+}
+
+// DialTimeout is Dial with a bound on connecting.
+func DialTimeout(name string, d time.Duration) (net.Conn, error) {
+	c, err := net.DialTimeout("unix", Address(name), d)
+	if err != nil {
+		return nil, ErrNoServer
+	}
+	return c, nil
+}
+
+// List names every hit endpoint in the socket directory. A socket left by a killed server
+// is listed too; it simply will not answer.
+func List() ([]string, error) {
+	paths, err := filepath.Glob(Address("hit-*"))
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(paths))
+	for _, p := range paths {
+		names = append(names, strings.TrimSuffix(filepath.Base(p), ".sock"))
+	}
+	return names, nil
 }

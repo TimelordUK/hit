@@ -33,6 +33,8 @@ commands:
   serve       stay resident and draw the finder on request, so the cost of
               starting a process is paid once per shell rather than per
               recall. Not a service: it dies with the shell, or when idle
+  status      list the resident servers: pid, parent shell, pipe, version,
+              uptime and use. --json for scripts
   version     print the version`
 
 func main() {
@@ -56,6 +58,8 @@ func run(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return runSearch(args[1:], env, stdout, stderr)
 	case "serve":
 		return runServe(args[1:], env, stdout, stderr)
+	case "status":
+		return runStatus(args[1:], env, stdout, stderr)
 	case "path":
 		return runPath(args[1:], env, stdout, stderr)
 	case "help", "--help", "-h":

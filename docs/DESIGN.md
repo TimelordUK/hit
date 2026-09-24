@@ -611,6 +611,23 @@ shell that already had one — testing a change against the version it replaced.
 because every failure on this path falls back to spawning and the next recall starts a
 fresh server.
 
+**What is resident has to be answerable without guessing** (C-034, S-032). Both of the
+problems above were found by noticing a process and not being able to say what it was, and
+on a managed machine that question may come from someone else. The ping reply therefore
+carries the server's own account of itself — pid, parent and whether the parent is still
+alive (from the pinned handle, not a fresh lookup), endpoint, exe, start time, idle limit,
+and how often and how recently it drew a finder. A ping resets the idle clock like any
+caller, so "last used" counts finder requests only: otherwise every status check would
+report an abandoned server as just used. `hit status` walks the pipe namespace and asks
+**every** `hit-*` endpoint rather than only this shell's, because the interesting cases —
+an orphan, a server from before the last install — are exactly the ones a per-session
+question misses. It marks the server whose parent is the shell it ran from, and says in
+words when a server is on another version or its shell has gone. Each ask is bounded at a
+second: a server drawing a finder in another shell cannot answer until that closes, and
+status reports it as busy rather than waiting. `Get-HitStatus` is the same question from
+inside the shell, for this session only and with no process started, and adds what only
+the shell knows: whether server mode is on at all.
+
 It is **opt-in** (`$env:HIT_SERVER`, or `Enable-HitServer` at any prompt) and
 `Disable-HitServer` abandons it with no restart. Something on the Ctrl+R path has to be
 abandonable the moment it misbehaves.

@@ -5,6 +5,10 @@
 # that slows the hot path down.
 
 BeforeAll {
+    # The owner's shell may well have HIT_TIMING on. Start from off, and give it back after.
+    $script:SavedHitTiming = $env:HIT_TIMING
+    $env:HIT_TIMING = $null
+
     . (Join-Path $PSScriptRoot '..' '..' 'shell' 'pwsh' 'hit.ps1')
 
     $script:HitSessionId = 'SESSION1'
@@ -113,3 +117,5 @@ Describe 'Format-HitTimeline' {
         Format-HitTimeline (New-HitTimeline) | Should -BeNullOrEmpty
     }
 }
+
+AfterAll { $env:HIT_TIMING = $script:SavedHitTiming }

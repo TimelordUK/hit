@@ -113,6 +113,7 @@ something alone. Your stored history is never rewritten; this only changes the p
 hit search --scope all           # the finder, standalone
 hit search --print --limit 20    # same ranking, JSON lines, no TUI (for scripts and fzf)
 hit path history|data|config     # where things live
+hit status                       # resident finders: pid, parent, pipe, version
 hit init pwsh                    # print the integration script
 hit version
 ```
@@ -178,6 +179,17 @@ it is a child of your shell, on a pipe only your account can open, and it exits 
 shell closes or after sitting idle. MSBuild, the C# compiler and gopls all do the same.
 If the server isn't there or won't answer, hit just starts the finder the old way — so the
 worst case is the speed you had before.
+
+To see what is resident:
+
+```powershell
+hit status                       # every hit server on this machine: pid, parent shell,
+                                 # pipe, version, uptime, use. --json for scripts
+Get-HitStatus                    # this shell only, without starting a process
+```
+
+`hit status` marks the one belonging to the shell you ran it from, and says in words when a
+server is running an older version than the one installed or its shell has gone.
 
 ## Settings
 

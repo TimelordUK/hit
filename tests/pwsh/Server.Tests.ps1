@@ -123,3 +123,45 @@ Describe 'Invoke-HitFinderOnServer' {
         Invoke-HitFinderOnServer 'git' | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Get-HitStatus' {
+    AfterEach { Disable-HitServer; $script:HitVersion = $null }
+
+    It 'says nothing is answering, rather than throwing, when there is no server' {
+        $script:HitSessionId = 'NOSUCHSESSION' + (Get-Random)
+        Enable-HitServer
+        $s = Get-HitStatus
+        $s.Answering | Should -BeFalse
+        $s.ServerMode | Should -BeTrue
+        $s.Pid | Should -BeNullOrEmpty
+        $s.Pipe | Should -Match ([regex]::Escape((Get-HitPipeName)) + '$')
+    }
+
+    It 'names the process that answered, and whether it belongs to this shell' {
+        $script:HitSessionId = 'SESSION1'
+        $script:HitVersion = 'v2'
+        $me = $PID
+        Mock Invoke-HitServerRequest {
+            [pscustomobject]@{ pong = $true; version = 'v2'; server = [pscustomobject]@{
+                pid = 4242; parent = $me; requests = 3; exe = 'C:\bin\hit.exe' } }
+        }
+        $s = Get-HitStatus
+        $s.Answering | Should -BeTrue
+        $s.Pid | Should -Be 4242
+        $s.ParentIsUs | Should -BeTrue
+        $s.Requests | Should -Be 3
+        $s.Stale | Should -BeFalse
+    }
+
+    # The S-031 case: a server started before the last install is still answering Ctrl+R.
+    It 'flags a server running a different version from this module' {
+        $script:HitSessionId = 'SESSION1'
+        $script:HitVersion = 'v2'
+        Mock Invoke-HitServerRequest {
+            [pscustomobject]@{ pong = $true; version = 'v1'; server = [pscustomobject]@{ pid = 1; parent = 2 } }
+        }
+        $s = Get-HitStatus
+        $s.Stale | Should -BeTrue
+        $s.ParentIsUs | Should -BeFalse
+    }
+}

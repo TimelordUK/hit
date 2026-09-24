@@ -24,10 +24,11 @@ func WritePwsh(w io.Writer, historyPath, exe, version string) error {
 #   Invoke-Expression (& hit init pwsh | Out-String)
 $null = New-Module -Name hit -ScriptBlock {
 $script:HitExe = %s
+$script:HitVersion = %s
 %s
 Enable-Hit -HistoryPath %s
-Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer
+Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer, Get-HitStatus
 } | Import-Module -Global
-`, version, psQuote(exe), pwshScript, psQuote(historyPath))
+`, version, psQuote(exe), psQuote(version), pwshScript, psQuote(historyPath))
 	return err
 }

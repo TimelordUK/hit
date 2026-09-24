@@ -517,6 +517,32 @@ function Test-HitServer {
     [bool]($res -and $res.pong)
 }
 
+# What this shell knows about its resident finder (S-032). `hit status` lists every server
+# on the machine; this answers for this session alone, without spawning anything, and adds
+# what only the shell knows — whether server mode is on at all.
+function Get-HitStatus {
+    $res = if ($script:HitSessionId) { Invoke-HitServerRequest -Request @{ ping = $true } }
+    $answering = [bool]($res -and $res.pong)
+    $srv = if ($answering) { $res.server }
+    $name = Get-HitPipeName
+    [pscustomobject]@{
+        ServerMode = $script:HitServerMode
+        Session    = $script:HitSessionId
+        Pipe       = if ($IsWindows) { '\\.\pipe\' + $name } else { $name }
+        Answering  = $answering
+        Pid        = if ($srv) { $srv.pid }
+        Parent     = if ($srv) { $srv.parent }
+        ParentIsUs = [bool]($srv -and $srv.parent -eq $PID)
+        Version    = if ($answering) { $res.version }
+        # Started before the last install, so Ctrl+R here is still the old code (S-031).
+        Stale      = [bool]($answering -and $script:HitVersion -and $res.version -ne $script:HitVersion)
+        Started    = if ($srv) { $srv.started }
+        LastUsed   = if ($srv) { $srv.lastUsed }
+        Requests   = if ($srv) { $srv.requests }
+        Exe        = if ($srv) { $srv.exe }
+    }
+}
+
 # Asks the resident process to draw. Returns the choice, or $null to mean "not served" —
 # never throws, so the caller can simply fall through to spawning.
 function Invoke-HitFinderOnServer([string]$Query) {
