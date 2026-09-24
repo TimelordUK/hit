@@ -35,6 +35,7 @@ import (
 type Request struct {
 	Query   string `json:"query"`
 	Scope   string `json:"scope"`
+	Sort    string `json:"sort,omitempty"`
 	Cwd     string `json:"cwd"`
 	Session string `json:"session"`
 	Host    string `json:"host"`
@@ -91,7 +92,16 @@ func runServe(args []string, env paths.Env, stdout, stderr io.Writer) int {
 
 	s := &server{ln: ln, idle: *idle, env: env}
 	if *parent > 0 {
-		go s.watchParent(*parent)
+		// The parent is pinned now, at startup, while it is certainly still the process
+		// that asked for us. Waiting until the first check would leave a window in which
+		// its id could already have been recycled (C-033).
+		w, err := watchProcess(*parent)
+		if err != nil {
+			debugf(env, "serve: parent %d already gone (%v)", *parent, err)
+			return 0
+		}
+		defer w.close()
+		go s.watchParent(w)
 	}
 	s.run(func(r Request) Response { return s.finder(r) })
 	debugf(env, "serve: exiting (%s)", s.why)
@@ -191,13 +201,13 @@ func (s *server) serveConn(conn net.Conn, h handler) {
 // takes the server with it, but a shell that exits while something else holds the console
 // would otherwise leave this process behind, and an unexplained resident process is
 // exactly what gets asked about on a managed machine.
-func (s *server) watchParent(pid int) {
+func (s *server) watchParent(w *parentWatch) {
 	for {
 		time.Sleep(5 * time.Second)
 		if s.finished() {
 			return
 		}
-		if !processAlive(pid) {
+		if !w.alive() {
 			s.stop("parent gone")
 			return
 		}
@@ -229,10 +239,12 @@ func (s *server) finder(r Request) Response {
 	h := store.Build(recs)
 	tl.Mark("build")
 	q := buildQuery(searchArgs{
-		Query: r.Query, Scope: r.Scope, Cwd: r.Cwd, Session: r.Session,
+		Query: r.Query, Scope: r.Scope, Sort: r.Sort, Cwd: r.Cwd, Session: r.Session,
 		Host: r.Host, Shell: r.Shell, OkOnly: r.OkOnly, Limit: r.Limit,
 	}, at)
 
+	debugf(s.env, "serve: %d entries, scope=%s sort=%s query=%q cwd=%q session=%q host=%q",
+		len(h.Entries), q.Scope, q.Sort, q.Text, q.Cwd, q.Session, q.Host)
 	var log func(string, ...any)
 	if s.env.Getenv("HIT_DEBUG") != "" {
 		log = func(format string, args ...any) { debugf(s.env, "serve/tui: "+format, args...) }
