@@ -193,14 +193,18 @@ handler reads the file through a line-editor adapter (`GetBuffer`/`SetBuffer`/`R
 tests replace with a fake, so handlers run with no keyboard (DESIGN §13.1).
 
 `hit search --print` runs the same ranking with no TUI and prints one JSON object per result
-(C-019): for tests, scripts, and piping into fzf.
+(C-019): for tests, scripts, and piping into fzf. `--sort rank|recent` reaches C-032 from
+there too; every flag has a matching field on the `hit serve` request, so the cold and warm
+routes cannot drift apart.
 
 **Keys as built** (all still provisional, to be moved into `config.toml` by F-018):
 
 | Key | Action |
 |---|---|
 | Ctrl+R (prompt) | open the finder, seeded with the current buffer; bound in both vi modes |
-| Ctrl+R (finder) | cycle scope: dir → session → host → all |
+| Ctrl+R (finder) | cycle scope, narrowing a step at a time: all → host → session → dir |
+| Alt+D | this directory only ⇄ the scope it was on before |
+| Alt+S | sort: rank ⇄ recent |
 | type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |
@@ -208,6 +212,39 @@ tests replace with a fake, so handlers run with no keyboard (DESIGN §13.1).
 | Ctrl+X | hide/show commands that failed |
 | Del / Ctrl+Z | tombstone the selection / undo, while the finder is open |
 | Esc / Ctrl+C | cancel, prompt untouched |
+
+**Scope: a cycle and a toggle.** The cycle used to run narrowest-first, and that made it
+feel broken. From `all` a single press landed on `dir`, and in a directory with nothing
+recorded in it the list went empty at once; getting out again took three more presses,
+through `session` and `host`, which in that directory were usually empty too. Two changes,
+both from the same report:
+
+- **The cycle narrows one step at a time**: all → host → session → dir. Each press makes
+  the list smaller, so you stop as soon as it is small enough, and the first press lands
+  somewhere that has rows. The order lives in `search.Scopes` and is pinned by a test.
+- **Alt+D is one key in and the same key out**, restoring whatever scope it found (T-008),
+  because "what do I run in this folder" is the question asked constantly and it should
+  not cost a journey round a cycle.
+
+**Order is a mode, not a better formula (C-032).** Ranking answers *what do I most likely
+want next*, and is right nearly always. It is wrong in one specific case: walking back
+through the last few things you ran, where frecency actively fights you, because a command
+run two hundred times outranks the one you ran once, five minutes ago. **Alt+S** switches
+between `rank` and `recent`; matching is untouched, so the same commands match and only
+their order changes. The two orders are two different questions, so neither is a default
+the other should be tuned into.
+
+**The header names the mode, always — default or not.** An indicator that appears only when
+it is switched on teaches nothing about the key that switches it off, and the question the
+header answers (*why am I not seeing what I expected?*) is asked precisely when you have
+forgotten which mode you are in. Scope and sort are shown permanently, and a non-default
+one is drawn as a badge rather than as another grey word. In the directory scope the header
+names the *folder*, because in a filter showing one directory's commands, which directory
+is the whole of the information.
+
+**An empty list says why it is empty**, and which key widens it. Without that it reads as a
+finder that has stopped working — which is exactly how the directory scope was first
+reported.
 
 **Matching modes.** A bare query is a smart-case subsequence. A query opening with a single
 quote is matched *literally* — `'hit` wants those three runes adjacent. Subsequence matching
@@ -233,6 +270,17 @@ session bonuses look at every run of that command, not just the latest.
   minute has stopped mattering and the day has started to. An entry with no usable timestamp
   gets a blank of the same width, so the commands stay in one column. Below a narrow pane the
   time is dropped rather than squeezing the command, which is the thing you came for (T-001).
+
+- **The selected row is a bar across the pane** (T-010). A row is drawn from several styles
+  — the time column, the matched runes, the `⏎ +N` marker — and each of them ends with a
+  full SGR reset, so wrapping the finished line in a "selected" style painted the highlight
+  only as far as the first nested style: in practice the `▸ ` prefix and nothing else. The
+  one row you need to find with your eye was the one row with no highlight on it. The
+  selected row is therefore drawn from *its own set of styles*, each already carrying the
+  highlight, with nothing wrapped round the outside, and it is padded to the full width so
+  the selection reads as a band rather than as a highlight that stops wherever the command
+  happens to end. Styles on that bar are all lifted a step, because a foreground chosen to
+  read as "dim" against the terminal's own background disappears on a coloured one.
 
 - **Multi-line is first class**: the list shows the command flattened onto one line with a
   `⏎ +3` marker, and a preview pane shows it in full.
@@ -544,6 +592,24 @@ malformed reply, an error in the response: each one drops through to the path th
 always worked, and the shell starts a server for next time. A ping is bounded so a wedged
 server can never hold the prompt; the draw itself is not, because that takes as long as
 you look at it — which is equally true of the one-shot finder.
+
+**It must not outlive its shell, and a process id is not enough to know that.** The server
+watches the shell that started it and exits when it goes. That watch was a process id
+checked on a timer, which asks the wrong question: Windows recycles ids briskly, so the
+shell can exit, its id be handed to something else, and the check keep answering yes about
+a stranger. Found from daily use on 2026-09-24 — a server whose shell had been killed was
+still resident, watching a `dotnet` process that had inherited its shell's id. The parent
+is now pinned with an **open handle taken at startup**, which both asks about that exact
+process and stops the id being reused while the handle is held (C-033). Unix has no
+equivalent handle; the id is kept with the caveat recorded, and a pidfd closes it properly
+when the server ships beyond Windows.
+
+**A new install stops the running servers.** A resident finder keeps running the binary it
+was started from, so after an install the old code would go on answering Ctrl+R in every
+shell that already had one — testing a change against the version it replaced.
+`install.ps1` stops them unless `-KeepServers` says otherwise; safe by construction,
+because every failure on this path falls back to spawning and the next recall starts a
+fresh server.
 
 It is **opt-in** (`$env:HIT_SERVER`, or `Enable-HitServer` at any prompt) and
 `Disable-HitServer` abandons it with no restart. Something on the Ctrl+R path has to be

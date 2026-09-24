@@ -6,32 +6,70 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TimelordUK/hit/internal/search"
 	"github.com/charmbracelet/lipgloss"
 )
 
 // Styles are resolved once. NO_COLOR (and a dumb terminal) fall back to plain text;
 // lipgloss itself degrades to 16 colours where that's all there is.
 type styles struct {
-	header, scope, match, selected, meta, marker, dim, sep, cursor lipgloss.Style
+	header, scope, badge, dim, sep, cursor lipgloss.Style
+
+	// row and selRow are the two sets a list row draws with. They exist as whole sets,
+	// rather than as one set plus a highlight wrapped round the finished line, because
+	// wrapping does not work: see rowStyles.
+	row, selRow rowStyles
+}
+
+// rowStyles is everything one list row draws with.
+//
+// A row is built from several styles — the time column, the matched runes, the ⏎ marker —
+// and each one ends with a full SGR reset. Wrapping the finished string in a "selected"
+// style therefore painted the highlight only as far as the first nested style, which in
+// practice was the "▸ " prefix: the one row you need to find with your eye was the one row
+// with no highlight on it. So the selected row is drawn from its own set of styles, each
+// already carrying the highlight, and nothing is wrapped round the outside (T-010).
+type rowStyles struct {
+	text, match, meta, marker, dim lipgloss.Style
 }
 
 func newStyles() styles {
 	if os.Getenv("NO_COLOR") != "" {
 		plain := lipgloss.NewStyle()
 		bold := lipgloss.NewStyle().Bold(true)
-		return styles{header: bold, scope: plain, match: bold, selected: lipgloss.NewStyle().Reverse(true),
-			meta: plain, marker: plain, dim: plain, sep: plain, cursor: lipgloss.NewStyle().Reverse(true)}
+		rev := lipgloss.NewStyle().Reverse(true)
+		return styles{
+			header: bold, scope: plain, badge: bold, dim: plain, sep: plain, cursor: rev,
+			row:    rowStyles{text: plain, match: bold, meta: plain, marker: plain, dim: plain},
+			selRow: rowStyles{text: rev, match: rev.Bold(true), meta: rev, marker: rev, dim: rev},
+		}
 	}
+	// The selected row is a bar of one background colour. Every style on it keeps its own
+	// job — matches stay the brightest thing, the time stays quieter than the command —
+	// but all of them are lifted a step, because a foreground chosen to read as "dim" on
+	// the terminal's own background disappears entirely on a coloured one.
+	const selBG = lipgloss.Color("24")
 	return styles{
-		header:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
-		scope:    lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		match:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
-		selected: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("24")),
-		meta:     lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
-		marker:   lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
-		dim:      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
-		sep:      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
-		cursor:   lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+		header: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
+		scope:  lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		badge:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("5")),
+		dim:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		sep:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		cursor: lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+		row: rowStyles{
+			text:   lipgloss.NewStyle(),
+			match:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
+			meta:   lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+			marker: lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
+			dim:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		},
+		selRow: rowStyles{
+			text:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(selBG),
+			match:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Background(selBG),
+			meta:   lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(selBG),
+			marker: lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Background(selBG),
+			dim:    lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(selBG),
+		},
 	}
 }
 
@@ -51,23 +89,21 @@ func (m Model) View() string {
 	// The search line: a prompt, what you've typed, a cursor, and how many commands match,
 	// so it is obvious that typing filters.
 	left := s.header.Render("hit ❯ ") + m.query.Text + s.cursor.Render("▏")
-	right := fmt.Sprintf("%d", len(m.results))
-	if len(m.results) == 1 {
-		right += " match"
-	} else {
-		right += " matches"
+	count := fmt.Sprintf("%d match", len(m.results))
+	if len(m.results) != 1 {
+		count += "es"
 	}
-	right += "  " + string(m.query.Scope)
-	if strings.HasPrefix(m.query.Text, "'") {
-		right += "  literal" // named, not left to be inferred from the quote (T-005)
+	right := s.scope.Render(count)
+	for _, md := range m.modes() {
+		// An active mode is a badge, not another word in a row of grey ones. Which mode
+		// the finder is in has to be readable at a glance, because the alternative is
+		// reading an empty list and concluding the finder is broken (T-008, T-009).
+		if md.active {
+			right += " " + s.badge.Render(" "+md.text+" ")
+		} else {
+			right += "  " + s.scope.Render(md.text)
+		}
 	}
-	if m.query.HideFailed {
-		right += "  ok-only"
-	}
-	if len(m.order) > 0 {
-		right += fmt.Sprintf("  %d deleted", len(m.order))
-	}
-	right = s.scope.Render(right)
 	if gap := m.width - lipgloss.Width(left) - lipgloss.Width(right); gap > 1 {
 		b.WriteString(left + strings.Repeat(" ", gap) + right)
 	} else {
@@ -77,7 +113,7 @@ func (m Model) View() string {
 
 	rows := m.listRows()
 	if len(m.results) == 0 {
-		b.WriteString(s.dim.Render("  no matches") + "\n")
+		b.WriteString(s.dim.Render(truncate("  "+m.emptyHint(), m.width)) + "\n")
 	}
 	for i := m.top; i < len(m.results) && i < m.top+rows; i++ {
 		b.WriteString(m.renderRow(s, i) + "\n")
@@ -88,7 +124,7 @@ func (m Model) View() string {
 		b.WriteString(m.renderPreview(s, p, now))
 	}
 	if line := m.timingLine(); line != "" {
-		b.WriteString(s.meta.Render(truncate(line, m.width)) + "\n")
+		b.WriteString(s.dim.Render(truncate(line, m.width)) + "\n")
 	}
 	b.WriteString(s.dim.Render(m.statusLine()))
 	out := b.String()
@@ -107,13 +143,87 @@ func (m Model) timingLine() string {
 	return ""
 }
 
+// mode is one indicator in the header: what the finder is currently doing to the list.
+// active marks the ones that are narrowing or reordering it, so they can be drawn as
+// badges rather than as more grey words.
+type mode struct {
+	text   string
+	active bool
+}
+
+// modes is what the header says about the current view, left to right.
+//
+// The scope and the sort order are always shown, default or not. An indicator that only
+// appears when it is on teaches you nothing about the key that turns it off, and the
+// question these answer — "why am I not seeing what I expected?" — is asked precisely when
+// you have forgotten which mode you are in.
+func (m Model) modes() []mode {
+	scope := string(m.query.Scope)
+	if m.query.Scope == search.ScopeDir {
+		// Naming the folder, not just the word "dir": in a filter that shows one
+		// directory's commands, which directory is the whole of the information.
+		if leaf := pathLeaf(m.query.Cwd); leaf != "" {
+			scope = "dir " + leaf
+		}
+	}
+	out := []mode{
+		{text: scope, active: m.query.Scope != search.ScopeAll},
+		{text: string(m.query.Sort), active: m.query.Sort != search.SortRank},
+	}
+	if strings.HasPrefix(m.query.Text, "'") {
+		out = append(out, mode{text: "literal", active: true}) // named, not inferred (T-005)
+	}
+	if m.query.HideFailed {
+		out = append(out, mode{text: "ok-only", active: true})
+	}
+	if n := len(m.order); n > 0 {
+		out = append(out, mode{text: fmt.Sprintf("%d deleted", n)})
+	}
+	return out
+}
+
+// pathLeaf is the last segment of a directory, for naming the dir filter. A drive or share
+// root has no leaf worth showing, so it keeps the whole path.
+func pathLeaf(p string) string {
+	p = strings.TrimRight(strings.ReplaceAll(p, "/", `\`), `\`)
+	if i := strings.LastIndex(p, `\`); i >= 0 && i < len(p)-1 {
+		return p[i+1:]
+	}
+	return p
+}
+
+// emptyHint says why the list is empty and which key widens it.
+//
+// An empty list with no explanation reads as a broken finder, and the scopes that most
+// often come up empty — this directory, this session — are the ones a single keystroke
+// lands you in. Saying which key gets you back out is the difference between a filter and
+// a dead end.
+func (m Model) emptyHint() string {
+	switch {
+	case m.query.Scope == search.ScopeDir:
+		where := pathLeaf(m.query.Cwd)
+		if where == "" {
+			where = "this folder"
+		}
+		return "nothing recorded in " + where + " — alt+d searches everywhere"
+	case m.query.Scope == search.ScopeSession:
+		return "nothing in this shell session yet — ^r widens the scope"
+	case m.query.Scope == search.ScopeHost:
+		return "nothing on this machine matches — ^r widens the scope"
+	case m.query.Text != "":
+		return "no matches"
+	}
+	return "no history yet"
+}
+
 // statusLine drops hints from the right as the pane narrows, keeping the position.
 func (m Model) statusLine() string {
 	pos := "0/0"
 	if len(m.results) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.cursor+1, len(m.results))
 	}
-	hints := []string{"↵ insert", "tab edit", "^r scope", "^x failed", "del remove", "^z undo", "esc cancel"}
+	hints := []string{"↵ insert", "alt+d dir", "alt+s sort", "^r scope", "^x failed",
+		"tab edit", "del remove", "^z undo", "esc cancel"}
 	for len(hints) > 0 {
 		line := pos + "  " + strings.Join(hints, " · ")
 		if lipgloss.Width(line) <= m.width {
@@ -218,9 +328,11 @@ func (m Model) renderRow(s styles, i int) string {
 		inMatch[p] = true
 	}
 
+	selected := i == m.cursor
+	rs := s.row
 	prefix := "  "
-	if i == m.cursor {
-		prefix = "▸ "
+	if selected {
+		rs, prefix = s.selRow, "▸ "
 	}
 	// The markers are what the row is *for* once it no longer fits, so they are measured
 	// first and the command gets the room that is left. Flattened labels are long enough
@@ -249,29 +361,42 @@ func (m Model) renderRow(s styles, i int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(prefix)
+	b.WriteString(rs.text.Render(prefix))
 	if stamp != "" {
-		b.WriteString(s.meta.Render(stamp))
+		b.WriteString(rs.meta.Render(stamp))
 	}
-	for j, ru := range label {
-		if inMatch[src[j]] {
-			b.WriteString(s.match.Render(string(ru)))
-		} else {
-			b.WriteString(string(ru))
+	// Runs of matched and unmatched runes are rendered a run at a time, not a rune at a
+	// time: one escape per run instead of per character, and the command's own text stays
+	// contiguous in the output where nothing matched.
+	for j := 0; j < len(label); {
+		k, on := j, inMatch[src[j]]
+		for k < len(label) && inMatch[src[k]] == on {
+			k++
 		}
+		text := string(label[j:k])
+		if on {
+			b.WriteString(rs.match.Render(text))
+		} else {
+			b.WriteString(rs.text.Render(text))
+		}
+		j = k
 	}
 	if clipped {
-		b.WriteString(s.dim.Render("…"))
+		b.WriteString(rs.dim.Render("…"))
 	}
 	if marker != "" {
-		b.WriteString(s.marker.Render(marker))
+		b.WriteString(rs.marker.Render(marker))
 	}
 	if count != "" {
-		b.WriteString(s.meta.Render(count))
+		b.WriteString(rs.meta.Render(count))
 	}
 	line := b.String()
-	if i == m.cursor {
-		return s.selected.Render(pad(line, m.width))
+	if selected {
+		// The bar runs to the edge of the pane, so the selection is a band across the
+		// list rather than a highlight that stops wherever the command happens to end.
+		if n := m.width - lipgloss.Width(line); n > 0 {
+			line += rs.text.Render(strings.Repeat(" ", n))
+		}
 	}
 	return line
 }
@@ -282,7 +407,7 @@ func (m Model) renderPreview(s styles, rows int, now time.Time) string {
 		return strings.Repeat("\n", rows)
 	}
 	var b strings.Builder
-	b.WriteString(s.meta.Render(truncate(describe(r, now), m.width)) + "\n")
+	b.WriteString(s.dim.Render(truncate(describe(r, now), m.width)) + "\n")
 	lines := strings.Split(r.Entry.Cmd, "\n")
 	shown := rows - 1
 	for i := 0; i < shown && i < len(lines); i++ {
@@ -295,13 +420,6 @@ func (m Model) renderPreview(s styles, rows int, now time.Time) string {
 		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-func pad(s string, width int) string {
-	if n := width - lipgloss.Width(s); n > 0 {
-		return s + strings.Repeat(" ", n)
-	}
-	return s
 }
 
 func truncate(s string, width int) string {

@@ -40,6 +40,11 @@ type Model struct {
 	deleted map[string]bool
 	order   []string // deletion order, so undo removes the last one
 
+	// prevScope is what the scope was before alt+d narrowed it to this directory, so the
+	// same key puts it back. Without it, leaving "this folder only" means pressing ^r
+	// three more times through two scopes that are usually empty too.
+	prevScope search.Scope
+
 	width, height int
 	Choice        *Choice // set when the finder is done
 
@@ -62,7 +67,17 @@ func (m *Model) logf(format string, args ...any) {
 }
 
 // New builds a finder over h. q carries the seed text, scope and context.
+//
+// The scope and sort order are filled in here rather than left empty, so that everything
+// downstream — the header, the toggles, the hint on an empty list — reads one value and
+// none of them has to know what an empty one would have meant.
 func New(h *store.History, q search.Query) Model {
+	if q.Scope == "" {
+		q.Scope = search.ScopeAll
+	}
+	if q.Sort == "" {
+		q.Sort = search.SortRank
+	}
 	m := Model{history: h, query: q, deleted: map[string]bool{}, width: 80, height: 24}
 	m.refresh()
 	return m
@@ -177,6 +192,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query.Scope = nextScope(m.query.Scope)
 		m.cursor, m.top = 0, 0
 		m.refresh()
+	case "alt+d": // this folder only ⇄ wherever you were before (T-008)
+		m.toggleDir()
+	case "alt+s": // sort: rank ⇄ recent (T-009)
+		m.query.Sort = nextSort(m.query.Sort)
+		m.cursor, m.top = 0, 0
+		m.refresh()
 	case "ctrl+x": // hide/show failed commands
 		m.query.HideFailed = !m.query.HideFailed
 		m.refresh()
@@ -219,6 +240,28 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// toggleDir narrows to the commands run in this directory, and puts back the scope it
+// found on the way out.
+//
+// The directory filter is the one you reach for constantly — "what do I run in this repo"
+// — and the scope cycle serves it badly: from `all`, one ^r lands on `dir`, and getting
+// out again means three more presses through `session` and `host`, which in a directory
+// with no history are empty too. So it looks like the finder broke. One key in, the same
+// key out (T-008). ^r still cycles all four, for the times you do want session or host.
+func (m *Model) toggleDir() {
+	if m.query.Scope == search.ScopeDir {
+		m.query.Scope = m.prevScope
+		if m.query.Scope == "" || m.query.Scope == search.ScopeDir {
+			m.query.Scope = search.ScopeAll
+		}
+	} else {
+		m.prevScope = m.query.Scope
+		m.query.Scope = search.ScopeDir
+	}
+	m.cursor, m.top = 0, 0
+	m.refresh()
+}
+
 func nextScope(s search.Scope) search.Scope {
 	for i, v := range search.Scopes {
 		if v == s {
@@ -226,6 +269,15 @@ func nextScope(s search.Scope) search.Scope {
 		}
 	}
 	return search.Scopes[0]
+}
+
+func nextSort(s search.Sort) search.Sort {
+	for i, v := range search.Sorts {
+		if v == s {
+			return search.Sorts[(i+1)%len(search.Sorts)]
+		}
+	}
+	return search.Sorts[0]
 }
 
 // Layout: one header line, the list, a separator, the preview, the status line. The

@@ -164,12 +164,15 @@ func TestCursorMovementStaysInRange(t *testing.T) {
 
 func TestScopeCycleAndFailedToggle(t *testing.T) {
 	m := testModel(t)
-	m.query.Scope = search.ScopeDir
+	// Driven off search.Scopes rather than a list written out here, so reordering the
+	// cycle (which T-008 did) is a decision made in one place.
+	m.query.Scope = search.Scopes[0]
 	m.refresh()
-	for _, want := range []search.Scope{search.ScopeSession, search.ScopeHost, search.ScopeAll, search.ScopeDir} {
+	for i := 1; i <= len(search.Scopes); i++ {
+		want := search.Scopes[i%len(search.Scopes)]
 		m = send(m, "ctrl+r")
 		if m.Query().Scope != want {
-			t.Fatalf("scope = %q, want %q", m.Query().Scope, want)
+			t.Fatalf("press %d: scope = %q, want %q", i, m.Query().Scope, want)
 		}
 	}
 	m = send(m, "ctrl+x")

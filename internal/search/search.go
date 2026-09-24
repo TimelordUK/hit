@@ -25,13 +25,40 @@ const (
 	ScopeDir     Scope = "dir"     // commands run in this directory
 )
 
-// Scopes in the order the finder cycles through them.
-var Scopes = []Scope{ScopeDir, ScopeSession, ScopeHost, ScopeAll}
+// Scopes in the order the finder cycles through them: widest first, so each press narrows
+// by one step.
+//
+// It used to run the other way, and that made the cycle feel broken. From `all`, a single
+// press landed on the *narrowest* scope, so in a directory with nothing recorded in it the
+// list went empty at once — and getting back out meant three more presses through scopes
+// that were usually empty too. Narrowing a step at a time lets you stop as soon as the
+// list is small enough, and the first press now lands somewhere that has rows (T-008).
+var Scopes = []Scope{ScopeAll, ScopeHost, ScopeSession, ScopeDir}
+
+// Sort is the order matching commands come back in (C-032).
+//
+// Ranking answers "what do I most likely want", which is right nearly always and wrong in
+// one specific case: when you know you ran something a minute ago and want to walk back
+// through the last few commands in the order you ran them. Frecency actively fights that,
+// because a command run 200 times outranks the one run once, five minutes ago. So the
+// order is a mode, not a better formula: the two questions are different questions.
+//
+// Matching is unaffected — a query still filters the same way, and only the order changes.
+type Sort string
+
+const (
+	SortRank   Sort = "rank"   // match quality × frequency × recency × bonuses
+	SortRecent Sort = "recent" // most recent run first, score ignored
+)
+
+// Sorts in the order the finder toggles through them.
+var Sorts = []Sort{SortRank, SortRecent}
 
 // Query is what the finder asks for.
 type Query struct {
 	Text       string // the filter the user has typed
 	Scope      Scope
+	Sort       Sort      // empty means SortRank
 	Cwd        string    // the shell's current directory
 	Session    string    // the shell's session id
 	Host       string    // this machine
@@ -104,12 +131,21 @@ func Search(h *store.History, q Query) []Result {
 		results = append(results, a.res)
 	}
 
-	sort.SliceStable(results, func(i, j int) bool {
-		if results[i].Score != results[j].Score {
-			return results[i].Score > results[j].Score
-		}
-		return results[i].Entry.Time.After(results[j].Entry.Time)
-	})
+	// Both orders fall back to most-recent-first, so a tie is never left to map order.
+	// An entry with no timestamp sorts last either way: a zero time is before everything.
+	switch q.Sort {
+	case SortRecent:
+		sort.SliceStable(results, func(i, j int) bool {
+			return results[i].Entry.Time.After(results[j].Entry.Time)
+		})
+	default:
+		sort.SliceStable(results, func(i, j int) bool {
+			if results[i].Score != results[j].Score {
+				return results[i].Score > results[j].Score
+			}
+			return results[i].Entry.Time.After(results[j].Entry.Time)
+		})
+	}
 	if q.Limit > 0 && len(results) > q.Limit {
 		results = results[:q.Limit]
 	}

@@ -27,6 +27,7 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	var (
 		query   = fs.String("query", "", "initial filter text (the current prompt buffer)")
 		scope   = fs.String("scope", string(search.ScopeAll), "dir | session | host | all")
+		order   = fs.String("sort", string(search.SortRank), "rank | recent")
 		cwd     = fs.String("cwd", "", "the shell's current directory")
 		session = fs.String("session", "", "the shell's session id")
 		host    = fs.String("host", "", "this machine's name")
@@ -69,7 +70,7 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 1
 	}
 	q := buildQuery(searchArgs{
-		Query: *query, Scope: *scope, Cwd: *cwd, Session: *session,
+		Query: *query, Scope: *scope, Sort: *order, Cwd: *cwd, Session: *session,
 		Host: *host, Shell: *shell, OkOnly: *okOnly, Limit: *limit,
 	}, at)
 
@@ -89,7 +90,11 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	debugf(env, "search: %d entries, scope=%s query=%q out=%q", len(h.Entries), q.Scope, q.Text, *out)
+	// cwd, session and host are logged because they decide what every scope but `all`
+	// shows, and a scope that comes up empty is indistinguishable from a broken finder
+	// without them.
+	debugf(env, "search: %d entries, scope=%s sort=%s query=%q cwd=%q session=%q host=%q out=%q",
+		len(h.Entries), q.Scope, q.Sort, q.Text, q.Cwd, q.Session, q.Host, *out)
 	var log func(string, ...any)
 	if env.Getenv("HIT_DEBUG") != "" {
 		log = func(format string, args ...any) { debugf(env, "tui: "+format, args...) }
@@ -116,15 +121,16 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 // `hit search`, or from a request on the pipe of a resident `hit serve`. Both build their
 // search.Query through buildQuery, so the two routes cannot drift apart.
 type searchArgs struct {
-	Query, Scope, Cwd, Session, Host, Shell string
-	OkOnly                                  bool
-	Limit                                   int
+	Query, Scope, Sort, Cwd, Session, Host, Shell string
+	OkOnly                                        bool
+	Limit                                         int
 }
 
 func buildQuery(a searchArgs, at time.Time) search.Query {
 	return search.Query{
-		Text: a.Query, Scope: search.Scope(a.Scope), Cwd: a.Cwd, Session: a.Session,
-		Host: a.Host, Shell: a.Shell, HideFailed: a.OkOnly, Limit: a.Limit, Now: at,
+		Text: a.Query, Scope: search.Scope(a.Scope), Sort: search.Sort(a.Sort),
+		Cwd: a.Cwd, Session: a.Session, Host: a.Host, Shell: a.Shell,
+		HideFailed: a.OkOnly, Limit: a.Limit, Now: at,
 	}
 }
 
