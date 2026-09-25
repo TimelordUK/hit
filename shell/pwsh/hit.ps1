@@ -424,7 +424,25 @@ function New-HitSearchArguments {
 
 $script:HitServerMode = $false
 $script:HitServerIdle = '30m'
-$script:HitServerStarted = $false   # we have tried to start one this session
+# When we last tried to start one, in TickCount64 ms; 0 is never. Not a once-per-session
+# flag: install.ps1 stops every server (S-031), and a shell that had already started one
+# then spawned on every Ctrl+R until Enable-HitServer was run by hand (S-033).
+$script:HitServerLastStart = 0
+# Long enough for a new binary's first launch on the work machine (~3.5 s, S-029) to
+# finish listening, so a second Ctrl+R does not race it for the pipe; short enough that a
+# killed server is back within a minute or so.
+$script:HitServerRetryMs = 30000
+
+# Starts the server. Replaceable so tests can count starts instead of making them.
+$script:HitServerLauncher = {
+    param([string[]]$Arguments)
+    if (-not $script:HitExe) { return }
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $script:HitExe
+    foreach ($a in $Arguments) { $null = $psi.ArgumentList.Add($a) }
+    $psi.UseShellExecute = $false
+    $null = [System.Diagnostics.Process]::Start($psi)
+}
 
 # Must agree with ipc.Name on the Go side; the contract test pins both to the same
 # vectors. Session ids are ULIDs, so in practice this only lower-cases them.
@@ -439,7 +457,7 @@ function Enable-HitServer {
     param([string]$Idle = $script:HitServerIdle)
     $script:HitServerIdle = $Idle
     $script:HitServerMode = $true
-    $script:HitServerStarted = $false
+    $script:HitServerLastStart = 0
     Write-HitDebug "server: enabled, idle $Idle"
 }
 
@@ -452,18 +470,15 @@ function Disable-HitServer {
 # on it exactly as a spawned finder does. --quiet because anything it printed would land
 # in the middle of the prompt.
 function Start-HitServer {
-    if ($script:HitServerStarted) { return }
-    $script:HitServerStarted = $true
-    if (-not $script:HitExe) { return }
+    $now = [Environment]::TickCount64
+    if ($script:HitServerLastStart -and $now - $script:HitServerLastStart -lt $script:HitServerRetryMs) {
+        Write-HitDebug 'server: not answering, but a start was tried recently'
+        return
+    }
+    $script:HitServerLastStart = $now
     try {
-        $psi = [System.Diagnostics.ProcessStartInfo]::new()
-        $psi.FileName = $script:HitExe
-        foreach ($a in @('serve', '--session', $script:HitSessionId, '--idle', $script:HitServerIdle,
-                '--parent', [string]$PID, '--quiet')) {
-            $null = $psi.ArgumentList.Add($a)
-        }
-        $psi.UseShellExecute = $false
-        $null = [System.Diagnostics.Process]::Start($psi)
+        & $script:HitServerLauncher @('serve', '--session', $script:HitSessionId, '--idle', $script:HitServerIdle,
+            '--parent', [string]$PID, '--quiet')
         Write-HitDebug "server: started, idle $script:HitServerIdle, parent $PID"
     } catch {
         Write-HitDebug ("server start failed: " + $_.Exception.Message)

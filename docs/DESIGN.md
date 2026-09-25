@@ -608,8 +608,14 @@ when the server ships beyond Windows.
 was started from, so after an install the old code would go on answering Ctrl+R in every
 shell that already had one — testing a change against the version it replaced.
 `install.ps1` stops them unless `-KeepServers` says otherwise; safe by construction,
-because every failure on this path falls back to spawning and the next recall starts a
-fresh server.
+because every failure on this path falls back to spawning and a later recall starts a
+fresh server. That last clause was not true at first: the shell tried to start a server
+once per session, so a shell that had already started one fell back to spawning on every
+Ctrl+R after an install until `Enable-HitServer` was run by hand (S-033, found at work
+2026-09-25). A recall that finds no server now starts one if the last attempt was more
+than 30 s ago. The wait is there because a new binary's first launch can take seconds on
+the work machine: a second start inside that window would only lose the race for the
+pipe, and a server that cannot start at all must not add a failed launch to every recall.
 
 **What is resident has to be answerable without guessing** (C-034, S-032). Both of the
 problems above were found by noticing a process and not being able to say what it was, and

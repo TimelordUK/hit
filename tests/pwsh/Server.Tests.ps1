@@ -19,6 +19,13 @@ BeforeAll {
         }
     }
 
+    # Counts server starts instead of starting one.
+    function Use-CountingLauncher {
+        $script:Launcher = [pscustomobject]@{ Calls = 0 }
+        $captured = $script:Launcher
+        $script:HitServerLauncher = { param([string[]]$Arguments) $captured.Calls++ }.GetNewClosure()
+    }
+
     # Counts cold spawns so a test can prove the fallback ran.
     function Use-CountingRunner([hashtable]$Choice) {
         $script:Runner = [pscustomobject]@{ Calls = 0 }
@@ -83,7 +90,7 @@ Describe 'Falling back to a cold spawn' {
     # failure the user ever sees.
     It 'spawns when server mode is on but no server is listening' {
         Enable-HitServer
-        $script:HitServerStarted = $true   # don't actually start one in a test
+        Use-CountingLauncher   # don't actually start one in a test
         Use-FakeEditor -Buffer 'git st'
         Use-CountingRunner @{ action = 'insert'; cmd = 'git status' }
         Invoke-HitFinder
@@ -93,11 +100,55 @@ Describe 'Falling back to a cold spawn' {
 
     It 'still redraws the prompt when it falls back' {
         Enable-HitServer
-        $script:HitServerStarted = $true
+        Use-CountingLauncher
         Use-FakeEditor -Buffer 'x'
         Use-CountingRunner @{ action = 'cancel' }
         Invoke-HitFinder
         $script:Editor.Redraws | Should -Be 1
+    }
+}
+
+# S-033, from daily use 2026-09-25: install.ps1 stops every server (S-031), but a shell that
+# had already started one never tried again, so every Ctrl+R there fell back to spawning
+# until Enable-HitServer was run by hand.
+Describe 'Starting the server again when it has gone' {
+    BeforeEach {
+        $script:HitSessionId = 'NOSUCHSESSION' + (Get-Random)
+        Enable-HitServer
+        Use-CountingLauncher
+        Use-FakeEditor -Buffer 'x'
+        Use-CountingRunner @{ action = 'cancel' }
+    }
+    AfterEach { Disable-HitServer }
+
+    It 'starts one on the first recall' {
+        Invoke-HitFinder
+        $script:Launcher.Calls | Should -Be 1
+    }
+
+    It 'starts another when the one it started has gone' {
+        Invoke-HitFinder
+        $script:HitServerLastStart -= 60000   # a minute later, and it was killed meanwhile
+        Invoke-HitFinder
+        $script:Launcher.Calls | Should -Be 2
+    }
+
+    # A new binary's first launch can take seconds on the work machine (S-029), so a
+    # server may still be starting when the next Ctrl+R comes. A second one would only
+    # lose the race for the pipe, and a server that cannot start at all must not add a
+    # failed launch to every recall.
+    It 'does not start another while the last attempt is recent' {
+        Invoke-HitFinder
+        Invoke-HitFinder
+        Invoke-HitFinder
+        $script:Launcher.Calls | Should -Be 1
+    }
+
+    It 'lets Enable-HitServer start one straight away' {
+        Invoke-HitFinder
+        Enable-HitServer
+        Invoke-HitFinder
+        $script:Launcher.Calls | Should -Be 2
     }
 }
 
