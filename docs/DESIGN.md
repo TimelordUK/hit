@@ -384,6 +384,49 @@ confirm = "prod"           # word you must type to proceed
 - A guard failing to evaluate (bad regex) must **not** block the command. It warns instead
   (principle 7).
 
+### 9.1 Danger is a command in a context (F-029)
+
+The owner administers many Elastic environments. The mistake they fear most is not a bad
+command but a good one in the wrong place: `Set-ElasticEnv PROD` (their own function, which
+sets environment variables), then later a command that mutates the stack, sent without
+remembering which environment the shell is pointed at. The same line is routine against a
+test stack. So danger is not a category (§17, which is static): it is **a mutating command
+while the shell's state says prod**, checked when Enter is pressed.
+
+```toml
+[[guard]]
+name    = "mutating elastic call while pointed at prod"
+when    = { env = "ELASTIC_ENV", match = '(?i)^prod' }     # the shell's state, read now
+match   = '(?i)-Method\s+(Post|Put|Delete|Patch)|curl\b.*-X\s*(POST|PUT|DELETE|PATCH)'
+unless  = '/_(search|count|msearch|mapping|cat)\b'           # POSTs that only read
+action  = "confirm"
+confirm = "prod"
+```
+
+- **`when` reads the live environment in-process** as Enter is pressed: a variable lookup,
+  no process, no network, so it is allowed on the hot path. The variable name is the
+  owner's to choose: whatever `Set-ElasticEnv` sets.
+- **Mutating is the hard half, and false alarms are the real enemy.** A guard that fires on
+  every `_search` is soon confirmed without being read, which is worse than no guard at
+  all. Hence `unless`: Elastic reads by POST (`_search`, `_count`, `_msearch`), and those
+  must pass silently. For the owner's own functions, PowerShell's verbs do the work:
+  `Get-`/`Test-`/`Find-` read, while `Set-`/`Remove-`/`New-`/`Update-`/`Clear-`/`Start-`/
+  `Stop-`/`Restart-` change things. So a rule can say "an Elastic function with a mutating
+  verb" without listing every function.
+- **The guard sees only the line typed.** `.\reindex.ps1` looks the same whether the script
+  reads or writes, and hit cannot see inside it. Scripts that mutate should defend
+  themselves (refuse to run against prod without `-Confirm`); a guard can still catch the
+  names of known mutating scripts, but it cannot be the only defence.
+- **The finder shows the same verdict before you get to Enter.** A recalled row that would
+  trip a guard *in the current state* is marked red when it is drawn — evaluated against
+  the shell as it is now, not as it was when the command was recorded. So the same history
+  row is red in a prod shell and plain in a test one. That needs the shell to pass the
+  guarded variables with the request, which the pipe already has room for.
+- **Being in prod should be visible all the time, not only at the guard.** The guard is the
+  last line of defence; the first is a prompt that says PROD in red. That belongs in the
+  owner's prompt, not in hit, but hit could offer a `Get-HitGuardState` for a prompt to
+  call.
+
 ## 10. Import
 
 `hit import <source>`, idempotent (re-running never duplicates):
@@ -665,10 +708,23 @@ into Ctrl+R — `jq` pipelines, one-off chains — gets no category. The owner's
 | `environment` | setting `$env:` variables, `Get-Credential` into a variable, and the like | the variable a script needs is exactly what gets forgotten |
 | `devops` | bespoke scripts, remoting, elastic operations (curl or script alike) | placeholder: grows heuristically, one rule at a time |
 
-**Simple commands, not chains.** A rule matches on the command's **first word**, so
-`git log -5` is `git` and a long chain that happens to call git halfway is not. A list of
-first words is the plain form; a regex is there for what a word list cannot say
-(`$env:X = …`).
+There is no `danger` category: danger depends on the shell's state as well as the command,
+so it is a guard (§9.1), and red is reserved for it.
+
+**Simple commands, not chains.** A rule matches on the command's **first word**, and only
+when the command is a single statement. `git log -5` is `git`, and so is
+`git log | Select-String fix` — a pipeline that *starts* with git is still git. A `;` or
+`&&` chain with git somewhere in it, or a script block (`& { … }`), is not: those are too
+bespoke to fold in (owner, 2026-09-26). A list of first words is the plain form; a regex is
+there for what a word list cannot say (`$env:X = …`).
+
+Telling a pipeline from a chain needs the shell's parser, and the Go side has none. But
+the shell already parses every command it records (PSReadLine hands over the AST), so the
+capture hook can store the command's **shape** — `simple`, `pipeline`, `chain` or `block` —
+beside it (S-034). That is a fact about the command, like its exit code, not a category, so
+storing it breaks nothing; categories stay a read-time view over it. Records made before
+the field existed fall back to a cheap heuristic in Go (an unquoted top-level `;` or `&&`
+means chain).
 
 **A fuzzy jump is not navigation.** `z platform` is a query, not a place; the `cd` record
 it produces is what lands in `navigation`. The jump itself stays unlabelled, and resolves
