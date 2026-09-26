@@ -645,3 +645,73 @@ easily as a fast one.
 The history file is re-read on every request rather than cached: commands have been
 appended since the last one, and a finder that could not see what you just ran would be
 worse than a slow one.
+
+## 17. Categories (planned, C-036)
+
+A category is a broad label over history, defined in `config.toml` and applied when the
+history is read. Nothing is stored, so the stored command is never touched, editing a rule
+reclassifies everything already recorded, and deleting the config loses nothing.
+
+**Few, or they are pointless.** A category earns its place by answering "I know roughly
+what kind of thing it was, but not the command". Anything better found by typing part of it
+into Ctrl+R — `jq` pipelines, one-off chains — gets no category. The owner's working set,
+2026-09-26, and already suspected of being one too many:
+
+| Category | What | Why it exists |
+|---|---|---|
+| `git` | simple commands starting `git` or `gh` | daily, and easy to scope to |
+| `navigation` | typed `cd`, `Set-Location`, `Push-Location`, … and the `cd` records the prompt writes | the bucket the directory finder / `z` replacement looks at (T-011) |
+| `content` | fetching from the web, expanding or making archives | mutative, and the syntax is always forgotten |
+| `environment` | setting `$env:` variables, `Get-Credential` into a variable, and the like | the variable a script needs is exactly what gets forgotten |
+| `devops` | bespoke scripts, remoting, elastic operations (curl or script alike) | placeholder: grows heuristically, one rule at a time |
+
+**Simple commands, not chains.** A rule matches on the command's **first word**, so
+`git log -5` is `git` and a long chain that happens to call git halfway is not. A list of
+first words is the plain form; a regex is there for what a word list cannot say
+(`$env:X = …`).
+
+**A fuzzy jump is not navigation.** `z platform` is a query, not a place; the `cd` record
+it produces is what lands in `navigation`. The jump itself stays unlabelled, and resolves
+with the exact-name rule (C-035): `gdt-platform` always takes `gdt-platform`, and only
+otherwise does frecency choose between it and `gdt-platform-launch`.
+
+**First matching rule wins the marker**, so order is priority. `devops` comes before
+`content` so that a `curl` to an elastic host is devops, not a download.
+
+A draft — the shape to build to, not a promise of field names:
+
+```toml
+[[category]]
+name     = "devops"
+match    = '(?i)elastic|^(Invoke-Command|Enter-PSSession)\b'
+cwd      = '~\scripts\**'     # anything run from the scripts tree, whatever it is called
+
+[[category]]
+name     = "git"
+commands = ["git", "gh"]
+
+[[category]]
+name     = "navigation"
+kind     = "cd"                # the recorded directory changes, or
+commands = ["cd", "sl", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
+
+[[category]]
+name     = "content"
+commands = ["Invoke-WebRequest", "iwr", "curl", "wget",
+            "Expand-Archive", "Compress-Archive", "tar", "7z", "unzip"]
+
+[[category]]
+name     = "environment"
+match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
+```
+
+Within one rule, `commands`, `match`, `cwd` and `kind` are alternatives: any one matching
+is enough. Rules that need two conditions at once ("directories, but only on a share") are
+left open until one is actually wanted. `navigation` is the exception: it
+is predefined because the directory finder depends on it, and it can still be overridden
+here.
+
+**`environment` brings secrets closer to the surface.** `$x = Get-Credential` records
+nothing secret, but `$env:TOKEN = 'abc…'` has already stored the token in plain text, and a
+category that gathers such lines makes them easier to find — for anyone reading the file.
+Secret redaction (C-014) becomes more pressing, not less, once this exists.
