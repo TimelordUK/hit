@@ -422,6 +422,25 @@ confirm = "prod"
   the shell as it is now, not as it was when the command was recorded. So the same history
   row is red in a prod shell and plain in a test one. That needs the shell to pass the
   guarded variables with the request, which the pipe already has room for.
+- **A cool-off, not just a confirm** (`cooloff = "8s"`). Owner, 2026-09-26: writing to
+  prod is rare enough that it should always feel like an outlier, and a confirm word alone
+  can still be typed on reflex. So the guard stops, shows what is about to happen, and
+  counts down; the confirm word is not accepted until the count reaches zero, and anything
+  typed early is discarded rather than queued. Friction is the point, and because the
+  guard fires so rarely it costs almost nothing. The details that make it work:
+  - **Show what is different, not a generic warning.** The environment and cluster (from
+    the same variables `when` read), the HTTP method or verb that made it mutating, and the
+    target index or endpoint. The countdown is time to read *that*.
+  - **The confirm word is the environment's name** (`prod`, or the cluster name), never
+    `y`: typing it is a statement of where you believe you are.
+  - **Esc cancels and leaves the command in the buffer**, untouched, so backing out costs
+    nothing and fixing the target is one edit away.
+  - **Every trip is logged**, confirmed or not, with the time and the environment. If this
+    guard fires often, the rule is wrong (or the work has changed), and a log is how that
+    gets noticed rather than tolerated.
+  - The countdown blocks the prompt on purpose. That does not break the hot-path rule,
+    which is about the cost of *checking*: the check stays a variable read and a regex, and
+    only a command that has already matched pays for the wait.
 - **Being in prod should be visible all the time, not only at the guard.** The guard is the
   last line of defence; the first is a prompt that says PROD in red. That belongs in the
   owner's prompt, not in hit, but hit could offer a `Get-HitGuardState` for a prompt to
