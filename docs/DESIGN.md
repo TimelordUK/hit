@@ -646,6 +646,9 @@ as it starts a one-shot finder, so the terminal handling is the same code that h
 run — only the control channel is new. That channel is a named pipe on Windows (invisible
 to anything enumerating sockets, and PowerShell speaks it natively through
 `NamedPipeClientStream`) and a unix socket elsewhere. No listening port is involved.
+On unix `NamedPipeClientStream` is given the socket's full path (`$XDG_RUNTIME_DIR`, else
+the temp directory, then `hit-<session>.sock`): a bare name would send .NET to
+`/tmp/CoreFxPipe_<name>` instead, where nothing listens (S-035).
 
 Requests are served one at a time. There is one console, so two finders could not both
 draw on it in any case.

@@ -185,7 +185,7 @@ Describe 'Get-HitStatus' {
         $s.Answering | Should -BeFalse
         $s.ServerMode | Should -BeTrue
         $s.Pid | Should -BeNullOrEmpty
-        $s.Pipe | Should -Match ([regex]::Escape((Get-HitPipeName)) + '$')
+        $s.Pipe | Should -Match ([regex]::Escape((Get-HitPipeEndpoint)) + '$')
     }
 
     It 'names the process that answered, and whether it belongs to this shell' {
@@ -214,5 +214,57 @@ Describe 'Get-HitStatus' {
         $s = Get-HitStatus
         $s.Stale | Should -BeTrue
         $s.ParentIsUs | Should -BeFalse
+    }
+}
+
+# S-035: every test above runs with no server listening, so the module and `hit serve` could
+# name different endpoints and nothing would fail — which is exactly what happened on Linux.
+# This starts a real server and checks the module reaches the endpoint it says it is on.
+Describe 'Against a real hit serve' {
+    BeforeAll {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+        $script:Exe = Join-Path $TestDrive ($IsWindows ? 'hit.exe' : 'hit')
+        Push-Location $root
+        try { go build -o $script:Exe ./cmd/hit; if ($LASTEXITCODE) { throw 'go build failed' } }
+        finally { Pop-Location }
+
+        $env:HIT_DATA_DIR = Join-Path $TestDrive 'data'
+        $env:HIT_CONFIG = Join-Path $TestDrive 'config.toml'
+        $null = New-Item -ItemType Directory -Force -Path $env:HIT_DATA_DIR
+        $script:HitSessionId = 'LIVE' + [guid]::NewGuid().ToString('N').Substring(0, 12)
+
+        $psi = [System.Diagnostics.ProcessStartInfo]::new($script:Exe)
+        foreach ($a in 'serve', '--session', $script:HitSessionId, '--idle', '1m', '--parent', [string]$PID) {
+            $psi.ArgumentList.Add($a)
+        }
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $script:Server = [System.Diagnostics.Process]::Start($psi)
+        # The first line is printed once it is listening. A first launch of a new binary can
+        # take seconds on a managed Windows machine (S-029), hence the generous wait.
+        $line = $script:Server.StandardOutput.ReadLineAsync()
+        if (-not $line.Wait(20000)) { throw 'hit serve did not start listening' }
+        $script:Endpoint = $line.Result
+    }
+
+    AfterAll {
+        if ($script:Server -and -not $script:Server.HasExited) { $script:Server.Kill() }
+        $env:HIT_DATA_DIR = $null
+        $env:HIT_CONFIG = $null
+    }
+
+    It 'names the endpoint the server is listening on' {
+        (Get-HitStatus).Pipe | Should -Be $script:Endpoint
+    }
+
+    It 'answers a ping' {
+        Test-HitServer | Should -BeTrue
+    }
+
+    It 'reports the process that answered' {
+        $s = Get-HitStatus
+        $s.Answering | Should -BeTrue
+        $s.Pid | Should -Be $script:Server.Id
+        $s.ParentIsUs | Should -BeTrue
     }
 }

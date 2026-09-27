@@ -453,6 +453,18 @@ function Get-HitPipeName([string]$Session = $script:HitSessionId) {
     'hit-' + $s.ToLowerInvariant()
 }
 
+# Where Invoke-HitServerRequest connects; must agree with ipc.Address on the Go side. On
+# Windows the pipe name is enough. Elsewhere .NET would turn a bare name into
+# /tmp/CoreFxPipe_<name>, which the Go server never listens on, so pass the socket path
+# itself: XDG_RUNTIME_DIR when there is one, the temp directory otherwise.
+function Get-HitPipeEndpoint([string]$Session = $script:HitSessionId) {
+    $name = Get-HitPipeName -Session $Session
+    if ($IsWindows) { return $name }
+    $dir = $env:XDG_RUNTIME_DIR
+    if (-not $dir) { $dir = [System.IO.Path]::GetTempPath() }
+    Join-Path $dir "$name.sock"
+}
+
 function Enable-HitServer {
     param([string]$Idle = $script:HitServerIdle)
     $script:HitServerIdle = $Idle
@@ -499,7 +511,7 @@ function Invoke-HitServerRequest {
     $pipe = $null
     try {
         $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
-            '.', (Get-HitPipeName), [System.IO.Pipes.PipeDirection]::InOut)
+            '.', (Get-HitPipeEndpoint), [System.IO.Pipes.PipeDirection]::InOut)
         $pipe.Connect($ConnectTimeoutMs)
         $json = ConvertTo-Json -InputObject $Request -Compress -Depth 3
         $bytes = $script:HitUtf8.GetBytes($json + "`n")
@@ -539,11 +551,10 @@ function Get-HitStatus {
     $res = if ($script:HitSessionId) { Invoke-HitServerRequest -Request @{ ping = $true } }
     $answering = [bool]($res -and $res.pong)
     $srv = if ($answering) { $res.server }
-    $name = Get-HitPipeName
     [pscustomobject]@{
         ServerMode = $script:HitServerMode
         Session    = $script:HitSessionId
-        Pipe       = if ($IsWindows) { '\\.\pipe\' + $name } else { $name }
+        Pipe       = if ($IsWindows) { '\\.\pipe\' + (Get-HitPipeEndpoint) } else { Get-HitPipeEndpoint }
         Answering  = $answering
         Pid        = if ($srv) { $srv.pid }
         Parent     = if ($srv) { $srv.parent }
