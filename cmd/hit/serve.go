@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/ipc"
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/internal/store"
@@ -144,6 +145,12 @@ type server struct {
 	info   ServerInfo   // fixed at startup; the live fields are filled in by status
 	parent *parentWatch // nil when not watching
 
+	// The categories, kept between requests and reloaded when config.toml changes, so
+	// editing a rule shows up at the next Ctrl+R without restarting anything (DESIGN
+	// §17.1). Touched only by the request goroutine; requests are serial.
+	cats    *category.Set
+	catsMod time.Time
+
 	mu    sync.Mutex
 	timer *time.Timer
 	why   string
@@ -267,6 +274,26 @@ func (s *server) watchParent(w *parentWatch) {
 	}
 }
 
+// categories returns the compiled categories, reloading them when config.toml's modified
+// time has changed. A stat of a local file per request is allowed on the hot path; the
+// rule forbids processes, the network and remote paths.
+func (s *server) categories() *category.Set {
+	p, err := paths.ConfigFile(s.env)
+	if err != nil {
+		return &category.Set{Problems: []string{err.Error()}}
+	}
+	var mod time.Time
+	if fi, err := os.Stat(p); err == nil {
+		mod = fi.ModTime()
+	}
+	if s.cats == nil || !mod.Equal(s.catsMod) {
+		s.cats, _ = loadCategories(s.env)
+		s.catsMod = mod
+		debugf(s.env, "serve: categories loaded (%d rules, %d problems)", len(s.cats.Rules), len(s.cats.Problems))
+	}
+	return s.cats
+}
+
 // finder is the real handler: reload the history, draw, answer. The history is re-read
 // every time rather than cached, because commands have been appended since the last one
 // and a finder that cannot see what you just ran would be worse than a slow one.
@@ -305,7 +332,7 @@ func (s *server) finder(r Request) Response {
 	// hasOut is true: the cold path passes it when the choice goes somewhere other than
 	// stdout, which makes the finder draw on stdout — the stream terminals handle best.
 	// Here the choice goes down the pipe, so the same applies.
-	choice, err := runFinder(h, q, true, log, tl)
+	choice, err := runFinder(h, q, s.categories(), "", true, log, tl)
 	if tl != nil {
 		timingf(s.env, "timing (go, served): %s", tl)
 	}

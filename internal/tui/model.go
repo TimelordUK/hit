@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/search"
 	"github.com/TimelordUK/hit/internal/store"
 	"github.com/TimelordUK/hit/internal/timing"
@@ -45,6 +46,12 @@ type Model struct {
 	// three more times through two scopes that are usually empty too.
 	prevScope search.Scope
 
+	// cats labels rows with the categories from config.toml (C-036); nil or empty means
+	// none are configured, and the finder looks exactly as it did before categories.
+	// catFilter is the rule the list is narrowed to, or -1 for all of them.
+	cats      *category.Labeler
+	catFilter int
+
 	width, height int
 	Choice        *Choice // set when the finder is done
 
@@ -78,9 +85,44 @@ func New(h *store.History, q search.Query) Model {
 	if q.Sort == "" {
 		q.Sort = search.SortRank
 	}
-	m := Model{history: h, query: q, deleted: map[string]bool{}, width: 80, height: 24}
+	m := Model{history: h, query: q, deleted: map[string]bool{}, width: 80, height: 24, catFilter: -1}
 	m.refresh()
 	return m
+}
+
+// SetCategories gives the finder its categories. filter names one to start narrowed to,
+// ignoring case (`hit search --category`); empty or unknown starts on all of them.
+func (m *Model) SetCategories(s *category.Set, filter string) {
+	m.cats = category.NewLabeler(s)
+	m.catFilter = -1
+	if filter != "" {
+		m.catFilter = s.Index(filter)
+	}
+	// Unfiltered, the list New built is already right; searching again would double the
+	// cost of opening the finder for nothing.
+	if m.catFilter >= 0 {
+		m.cursor, m.top = 0, 0
+		m.refresh()
+	}
+}
+
+// hasCategories is whether any category is configured. Without one, nothing about
+// categories is drawn: no column, no header word, no key hint.
+func (m Model) hasCategories() bool {
+	return m.cats != nil && m.cats.Set != nil && len(m.cats.Set.Rules) > 0
+}
+
+// categoryMark is the rule whose mark a result carries: the first that matches, in
+// config order.
+func (m Model) categoryMark(r search.Result) (category.Rule, bool) {
+	if !m.hasCategories() {
+		return category.Rule{}, false
+	}
+	labels := m.cats.Labels(r.Entry.Cmd, r.Entry.Cwd)
+	if len(labels) == 0 {
+		return category.Rule{}, false
+	}
+	return m.cats.Set.Rules[labels[0]], true
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -103,6 +145,11 @@ func (m Model) Selected() (search.Result, bool) {
 }
 
 func (m *Model) refresh() {
+	m.query.Keep = nil
+	if m.catFilter >= 0 && m.hasCategories() {
+		cats, i := m.cats, m.catFilter
+		m.query.Keep = func(e store.Entry) bool { return cats.Has(e.Cmd, e.Cwd, i) }
+	}
 	all := search.Search(m.history, m.query)
 	m.results = all[:0:0]
 	for _, r := range all {
@@ -198,6 +245,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query.Sort = nextSort(m.query.Sort)
 		m.cursor, m.top = 0, 0
 		m.refresh()
+	case "alt+g": // category filter: all → each category in config order → all (C-036)
+		if m.hasCategories() {
+			m.catFilter++
+			if m.catFilter >= len(m.cats.Set.Rules) {
+				m.catFilter = -1
+			}
+			m.cursor, m.top = 0, 0
+			m.refresh()
+		}
 	case "ctrl+x": // hide/show failed commands
 		m.query.HideFailed = !m.query.HideFailed
 		m.refresh()

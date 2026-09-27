@@ -19,6 +19,10 @@ type styles struct {
 	// rather than as one set plus a highlight wrapped round the finished line, because
 	// wrapping does not work: see rowStyles.
 	row, selRow rowStyles
+
+	// noColor is NO_COLOR: category marks are then plain letters, which is why a mark is
+	// a letter and not only a colour.
+	noColor bool
 }
 
 // rowStyles is everything one list row draws with.
@@ -39,7 +43,8 @@ func newStyles() styles {
 		bold := lipgloss.NewStyle().Bold(true)
 		rev := lipgloss.NewStyle().Reverse(true)
 		return styles{
-			header: bold, scope: plain, badge: bold, dim: plain, sep: plain, cursor: rev,
+			noColor: true,
+			header:  bold, scope: plain, badge: bold, dim: plain, sep: plain, cursor: rev,
 			row:    rowStyles{text: plain, match: bold, meta: plain, marker: plain, dim: plain},
 			selRow: rowStyles{text: rev, match: rev.Bold(true), meta: rev, marker: rev, dim: rev},
 		}
@@ -134,6 +139,62 @@ func (m Model) View() string {
 	return out
 }
 
+// markStyle draws a category's mark (T-012). In the list it is the letter in the
+// category's colour and nothing more, so a screen of rows stays quiet. On the selected row
+// it becomes a chip, the colour behind the letter, because the bar has a background of its
+// own and a blue letter on the blue bar would simply vanish.
+func (s styles) markStyle(color string, selected bool) lipgloss.Style {
+	if s.noColor {
+		if selected {
+			return lipgloss.NewStyle().Reverse(true).Bold(true)
+		}
+		return lipgloss.NewStyle()
+	}
+	c := ansiColor(color)
+	if selected {
+		return lipgloss.NewStyle().Bold(true).Background(c).Foreground(chipText(color))
+	}
+	return lipgloss.NewStyle().Foreground(c)
+}
+
+// ansiColor maps a configured colour to a terminal one. Names are the 16 ANSI colours, so
+// they follow the terminal's own palette; #rrggbb is passed through for lipgloss to fit to
+// the terminal. Empty is the quiet default, the same grey as the time column.
+func ansiColor(name string) lipgloss.Color {
+	if strings.HasPrefix(name, "#") {
+		return lipgloss.Color(name)
+	}
+	if i, ok := ansiIndex[name]; ok {
+		return lipgloss.Color(i)
+	}
+	return lipgloss.Color("8")
+}
+
+var ansiIndex = map[string]string{
+	"black": "0", "red": "1", "green": "2", "yellow": "3", "blue": "4", "magenta": "5",
+	"cyan": "6", "white": "7", "gray": "8", "grey": "8", "bright-black": "8",
+	"bright-red": "9", "bright-green": "10", "bright-yellow": "11", "bright-blue": "12",
+	"bright-magenta": "13", "bright-cyan": "14", "bright-white": "15",
+}
+
+// chipText is the letter's colour on a chip: white on the dark colours, black on the
+// light ones, so the letter reads on any of them.
+func chipText(name string) lipgloss.Color {
+	if strings.HasPrefix(name, "#") && len(name) == 7 {
+		var r, g, b int
+		fmt.Sscanf(name[1:], "%02x%02x%02x", &r, &g, &b)
+		if (299*r+587*g+114*b)/1000 > 140 {
+			return lipgloss.Color("0")
+		}
+		return lipgloss.Color("15")
+	}
+	switch name {
+	case "", "black", "red", "blue", "magenta", "gray", "grey", "bright-black":
+		return lipgloss.Color("15")
+	}
+	return lipgloss.Color("0")
+}
+
 // timingLine is the phase report, shown only with HIT_TIMING set. It is deliberately the
 // raw numbers: it exists to be read off a screen and pasted into a bug report.
 func (m Model) timingLine() string {
@@ -176,6 +237,20 @@ func (m Model) modes() []mode {
 	if m.query.HideFailed {
 		out = append(out, mode{text: "ok-only", active: true})
 	}
+	if m.hasCategories() {
+		// Named permanently once categories exist, like scope and sort; absent when none
+		// are configured, because then there is no key to teach.
+		if m.catFilter >= 0 {
+			out = append(out, mode{text: m.cats.Set.Rules[m.catFilter].Name, active: true})
+		} else {
+			out = append(out, mode{text: "any group"})
+		}
+	}
+	if m.cats != nil && m.cats.Set != nil && len(m.cats.Set.Problems) > 0 {
+		// Quiet, but there: a rule that silently stopped working looks like a category
+		// that has nothing in it. `hit categories` says what is wrong.
+		out = append(out, mode{text: "config ⚠"})
+	}
 	if n := len(m.order); n > 0 {
 		out = append(out, mode{text: fmt.Sprintf("%d deleted", n)})
 	}
@@ -199,6 +274,9 @@ func pathLeaf(p string) string {
 // lands you in. Saying which key gets you back out is the difference between a filter and
 // a dead end.
 func (m Model) emptyHint() string {
+	if m.catFilter >= 0 && m.hasCategories() {
+		return "nothing in " + m.cats.Set.Rules[m.catFilter].Name + " matches — alt+g for the next group"
+	}
 	switch {
 	case m.query.Scope == search.ScopeDir:
 		where := pathLeaf(m.query.Cwd)
@@ -224,6 +302,9 @@ func (m Model) statusLine() string {
 	}
 	hints := []string{"↵ insert", "alt+d dir", "alt+s sort", "^r scope", "^x failed",
 		"tab edit", "del remove", "^z undo", "esc cancel"}
+	if m.hasCategories() {
+		hints = append(hints[:3], append([]string{"alt+g group"}, hints[3:]...)...)
+	}
 	for len(hints) > 0 {
 		line := pos + "  " + strings.Join(hints, " · ")
 		if lipgloss.Width(line) <= m.width {
@@ -350,7 +431,25 @@ func (m Model) renderRow(s styles, i int) string {
 	if m.width >= timeColMinWidth {
 		stamp = timeColumn(r.Entry.Time, m.clock()) + "  "
 	}
-	width := max(10, m.width-lipgloss.Width(prefix)-lipgloss.Width(stamp)-
+	// The category mark is a column of its own between the time and the command (T-012):
+	// one cell, blank on an uncategorised row so every command starts in the same place.
+	// It only exists when categories are configured, so without them the row is unchanged.
+	var mark string
+	var markStyle lipgloss.Style
+	if m.hasCategories() {
+		mark = " "
+		if rule, ok := m.categoryMark(r); ok {
+			mark, markStyle = rule.Mark, s.markStyle(rule.Color, selected)
+		}
+		if stamp != "" {
+			stamp = strings.TrimSuffix(stamp, " ") // the mark's own spacing replaces one
+		}
+	}
+	markWidth := 0
+	if mark != "" {
+		markWidth = 2
+	}
+	width := max(10, m.width-lipgloss.Width(prefix)-lipgloss.Width(stamp)-markWidth-
 		lipgloss.Width(marker)-lipgloss.Width(count))
 
 	// The ellipsis costs a column of its own, so it comes out of the label's room.
@@ -364,6 +463,13 @@ func (m Model) renderRow(s styles, i int) string {
 	b.WriteString(rs.text.Render(prefix))
 	if stamp != "" {
 		b.WriteString(rs.meta.Render(stamp))
+	}
+	if mark != "" {
+		if mark == " " {
+			b.WriteString(rs.text.Render("  "))
+		} else {
+			b.WriteString(markStyle.Render(mark) + rs.text.Render(" "))
+		}
 	}
 	// Runs of matched and unmatched runes are rendered a run at a time, not a rune at a
 	// time: one escape per run instead of per character, and the command's own text stays

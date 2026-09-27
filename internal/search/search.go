@@ -66,6 +66,10 @@ type Query struct {
 	HideFailed bool      // drop commands with a non-zero exit
 	Now        time.Time // for ranking and tests
 	Limit      int       // 0 means no limit
+	// Keep, when set, drops every run it returns false for, before duplicates collapse:
+	// the category filter (C-036). Per run rather than per command, because a rule can
+	// depend on where a command ran, and so that Count counts only the runs kept.
+	Keep func(store.Entry) bool
 }
 
 // Result is one line in the finder: a command, with the run it was last seen in.
@@ -96,6 +100,9 @@ func Search(h *store.History, q Query) []Result {
 			continue
 		}
 		if q.HideFailed && e.Exit != nil && *e.Exit != 0 {
+			continue
+		}
+		if q.Keep != nil && !q.Keep(e) {
 			continue
 		}
 		a, seen := byCmd[e.Cmd]

@@ -137,6 +137,12 @@ match    = '(?i)elastic'
 cwd      = ['~\dev\ops-scripts\**']
 ```
 
+In Ctrl+R each categorised row carries its category's letter, in its colour, between the
+time and the command, and **Alt+G** cycles the list through the categories and back to all
+of them. `color` is an ANSI name (`blue`, `bright-yellow`, …) or `#rrggbb`; left out, the
+letter is a quiet grey. `mark` overrides the letter. Edits to the config show up at the
+next Ctrl+R, with no restart.
+
 A pipeline that starts with the word counts; a `;` chain or a script block never does.
 Nothing is stored, so editing a rule relabels everything you have already run. To tune the
 rules against your own history:

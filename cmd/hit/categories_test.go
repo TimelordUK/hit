@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/internal/record"
@@ -125,5 +126,50 @@ func TestCategoriesWithNoHistory(t *testing.T) {
 	env := isolated(t, twoCategories)
 	if out := runCmd(t, env, "categories"); !strings.Contains(out, "history  0 commands") {
 		t.Errorf("got:\n%s", out)
+	}
+}
+
+func TestSearchPrintCanBeNarrowedToACategory(t *testing.T) {
+	env := isolated(t, twoCategories, "git status", "ls", "gh pr list", "curl https://x")
+	out := runCmd(t, env, "search", "--print", "--category", "git")
+	if !strings.Contains(out, "git status") || !strings.Contains(out, "gh pr list") ||
+		strings.Contains(out, `"ls"`) || strings.Contains(out, "curl") {
+		t.Errorf("got:\n%s", out)
+	}
+}
+
+func TestSearchRejectsAnUnknownCategory(t *testing.T) {
+	env := isolated(t, twoCategories, "git status")
+	var out, errb bytes.Buffer
+	if code := run([]string{"search", "--print", "--category", "gti"}, env, &out, &errb); code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), `no category "gti"`) {
+		t.Errorf("stderr: %s", errb.String())
+	}
+}
+
+// Editing config.toml shows up at the next Ctrl+R: the resident server reloads it when its
+// modified time changes, and otherwise keeps what it compiled.
+func TestServerReloadsCategoriesWhenTheConfigChanges(t *testing.T) {
+	env := isolated(t, twoCategories)
+	s := &server{env: env}
+	first := s.categories()
+	if len(first.Rules) != 2 {
+		t.Fatalf("rules: %d", len(first.Rules))
+	}
+	if s.categories() != first {
+		t.Error("an unchanged config should not be recompiled")
+	}
+	p, _ := paths.ConfigFile(env)
+	if err := os.WriteFile(p, []byte("[[category]]\nname = \"only\"\ncommands = [\"x\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute) // file systems with coarse timestamps
+	if err := os.Chtimes(p, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.categories(); len(got.Rules) != 1 || got.Rules[0].Name != "only" {
+		t.Errorf("edited config not picked up: %+v", got.Rules)
 	}
 }

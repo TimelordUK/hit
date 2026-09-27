@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/clock"
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/internal/record"
@@ -37,6 +38,7 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		out     = fs.String("out", "", "write the chosen command here as JSON")
 		print   = fs.Bool("print", false, "print ranked results as JSON lines and exit")
 		started = fs.Int64("started-at", 0, "unix ms when the shell spawned us (for --timing)")
+		group   = fs.String("category", "", "only this category (see hit categories)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -74,7 +76,18 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		Host: *host, Shell: *shell, OkOnly: *okOnly, Limit: *limit,
 	}, at)
 
+	cats, _ := loadCategories(env)
+	tl.Mark("config")
+	if *group != "" && cats.Index(*group) < 0 {
+		fmt.Fprintf(stderr, "hit: no category %q (hit categories lists them)\n", *group)
+		return 2
+	}
+
 	if *print {
+		if i := cats.Index(*group); i >= 0 {
+			l := category.NewLabeler(cats)
+			q.Keep = func(e store.Entry) bool { return l.Has(e.Cmd, e.Cwd, i) }
+		}
 		enc := json.NewEncoder(stdout)
 		enc.SetEscapeHTML(false)
 		for _, r := range search.Search(h, q) {
@@ -99,7 +112,7 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	if env.Getenv("HIT_DEBUG") != "" {
 		log = func(format string, args ...any) { debugf(env, "tui: "+format, args...) }
 	}
-	choice, err := runFinder(h, q, *out != "", log, tl)
+	choice, err := runFinder(h, q, cats, *group, *out != "", log, tl)
 	if tl != nil {
 		timingf(env, "timing (go): %s", tl)
 	}
@@ -147,9 +160,10 @@ func clockNow(env paths.Env) (time.Time, error) {
 // With --out the result goes to that file, so the finder can draw on stdout, which is the
 // stream terminals handle best. Without it the result goes to stdout, so the finder draws
 // on stderr instead to keep stdout parseable.
-func runFinder(h *store.History, q search.Query, hasOut bool, log func(string, ...any),
-	tl *timing.Timeline) (*tui.Choice, error) {
+func runFinder(h *store.History, q search.Query, cats *category.Set, group string, hasOut bool,
+	log func(string, ...any), tl *timing.Timeline) (*tui.Choice, error) {
 	m := tui.New(h, q)
+	m.SetCategories(cats, group)
 	tl.Mark("rank")
 	m.Log = log
 	m.Timing = tl

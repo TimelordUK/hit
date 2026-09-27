@@ -205,6 +205,7 @@ routes cannot drift apart.
 | Ctrl+R (finder) | cycle scope, narrowing a step at a time: all → host → session → dir |
 | Alt+D | this directory only ⇄ the scope it was on before |
 | Alt+S | sort: rank ⇄ recent |
+| Alt+G | category filter: all → each category in config order → all (§17.1; only with categories configured) |
 | type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |

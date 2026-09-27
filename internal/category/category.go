@@ -373,3 +373,54 @@ func globRegexp(glob string, p Paths) (*regexp.Regexp, error) {
 	b.WriteString("$")
 	return regexp.Compile(b.String())
 }
+
+// Labeler remembers what each command was classified as, so the finder classifies a
+// command once per session rather than once per keystroke. The key includes the
+// directory, because a cwd rule can label the same command differently by where it ran.
+// Not safe for concurrent use; the finder draws on one goroutine.
+type Labeler struct {
+	Set   *Set
+	cache map[string][]int
+}
+
+// NewLabeler wraps s. A nil or empty set labels nothing.
+func NewLabeler(s *Set) *Labeler {
+	return &Labeler{Set: s, cache: map[string][]int{}}
+}
+
+// Labels is Classify, remembered.
+func (l *Labeler) Labels(cmd, cwd string) []int {
+	if l == nil || l.Set == nil || len(l.Set.Rules) == 0 {
+		return nil
+	}
+	key := cwd + "\x00" + cmd
+	if v, ok := l.cache[key]; ok {
+		return v
+	}
+	v := l.Set.Classify(cmd, cwd)
+	l.cache[key] = v
+	return v
+}
+
+// Has reports whether rule i is among the labels.
+func (l *Labeler) Has(cmd, cwd string, i int) bool {
+	for _, j := range l.Labels(cmd, cwd) {
+		if j == i {
+			return true
+		}
+	}
+	return false
+}
+
+// Index is the position of the named rule, or -1.
+func (s *Set) Index(name string) int {
+	if s == nil {
+		return -1
+	}
+	for i, r := range s.Rules {
+		if strings.EqualFold(r.Name, name) {
+			return i
+		}
+	}
+	return -1
+}
