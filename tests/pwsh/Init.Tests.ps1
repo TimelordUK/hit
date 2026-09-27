@@ -110,6 +110,13 @@ Describe 'hit init pwsh' {
     It 'skips blank and leading-space commands' {
         Send-Line '   ' | Out-Null
         Send-Line ' secret-thing --token x' | Out-Null
+        Send-Line "`t`r`n" | Out-Null
+        Read-HitHistory | Should -BeNullOrEmpty
+    }
+
+    It 'skips lines of only control characters (S-036: a leaked Ctrl+F Ctrl+F)' {
+        Send-Line "$([char]6)$([char]6)" | Out-Null
+        Send-Line " $([char]27)`t" | Out-Null
         Read-HitHistory | Should -BeNullOrEmpty
     }
 

@@ -162,6 +162,7 @@ unloads it. This is the only process spawn, and it happens once at shell startup
   `\\server\share\…`, not `Microsoft.PowerShell.Core\FileSystem::\\server\…`.
   Non-filesystem providers (`HKLM:`, `Cert:`) store the PowerShell path (`HKLM:\SOFTWARE`).
 - Leading-space commands are not recorded (opt-out convention, like bash `HISTCONTROL`).
+  Nor are blank ones: nothing but whitespace or control characters (S-036).
 - Cost: ~0.8 ms per command (Enter + prompt, two appends) on the owner's machine.
 
 ### zsh

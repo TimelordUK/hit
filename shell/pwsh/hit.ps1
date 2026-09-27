@@ -145,7 +145,9 @@ function Get-HitLocationPath([System.Management.Automation.PathInfo]$Location) {
 # AddToHistoryHandler said: PSReadLine's default returns MemoryOnly for lines that look
 # sensitive (password, token, apikey, secret…), and hit doesn't write those either.
 function Test-HitShouldRecord([string]$Line, $Verdict) {
-    if ([string]::IsNullOrWhiteSpace($Line)) { return $false }
+    # Blank means nothing visible: whitespace or control characters only (S-036: a
+    # leaked Ctrl+F Ctrl+F was recorded and showed as an empty row in the finder).
+    if ($Line -notmatch '[^\s\p{C}]') { return $false }
     if ($Line[0] -eq ' ') { return $false }  # leading space: don't record (S-006)
     if ($Verdict -is [bool]) { return $Verdict }
     if ($null -eq $Verdict) { return $true }
