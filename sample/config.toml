@@ -27,3 +27,30 @@ commands = ["Invoke-WebRequest", "iwr", "curl", "wget",
 name     = "environment"
 match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 color    = "cyan"
+
+# ---------------------------------------------------------------------------------------
+# Captured environment (C-037, DESIGN §18) — PLACEHOLDER, refine at work.
+#
+# Which environment variables to remember alongside your commands, so history can later
+# answer "what was I pointed at when I ran that?". Nothing is captured unless listed here.
+#
+#   - A name:  "ELASTIC_ENV"  always recorded; null when it is not set.
+#   - A glob:  "ES_*"         every set variable that matches (case-insensitive on Windows).
+#   - Secrets: any name containing PASS, PWD, TOKEN, SECRET, KEY or CRED is only ever
+#              recorded as {"set":true}, never its value, even if listed or caught by a glob.
+#
+# A record is written when a shell starts and again only when one of these values changes
+# (e.g. after Set-ElasticEnv PROD), not on every command.
+#
+# To try it: uncomment, copy this file to (hit path config), open a NEW shell, change a
+# variable, then look at the tail of the history file:
+#   Get-Content (hit path history) -Tail 5 | Select-String '"k":"env"'
+#
+# [capture]
+# env = [
+#     "ELASTIC_ENV",      # whatever Set-ElasticEnv sets
+#     "ES_URL",
+#     "ES_USER",
+#     # "ES_*",           # or everything with this prefix
+#     # "AWS_PROFILE",
+# ]
