@@ -57,10 +57,16 @@ if ($Clear) {
 if (-not $KeepServers) {
     # Matched on the command line rather than on the image path, because the point is to
     # catch servers started from an *older* binary, wherever that binary lived.
-    $servers = @(Get-CimInstance Win32_Process -Filter "Name='hit.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -and $_.CommandLine -match '"?\s+serve(\s|$)' })
+    # CIM is Windows-only; elsewhere pwsh fills Process.CommandLine from /proc (Linux).
+    $procs = if ($IsWindows) {
+        Get-CimInstance Win32_Process -Filter "Name='hit.exe'" -ErrorAction SilentlyContinue |
+            Select-Object @{ n = 'Id'; e = { $_.ProcessId } }, CommandLine
+    } else {
+        Get-Process -Name hit -ErrorAction SilentlyContinue | Select-Object Id, CommandLine
+    }
+    $servers = @($procs | Where-Object { $_.CommandLine -and $_.CommandLine -match '"?\s+serve(\s|$)' })
     foreach ($s in $servers) {
-        Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
+        Stop-Process -Id $s.Id -Force -ErrorAction SilentlyContinue
     }
     if ($servers.Count) {
         Write-Host "stopped $($servers.Count) resident finder(s); the next Ctrl+R starts one on this build"
