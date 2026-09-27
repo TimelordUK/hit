@@ -708,7 +708,7 @@ The history file is re-read on every request rather than cached: commands have b
 appended since the last one, and a finder that could not see what you just ran would be
 worse than a slow one.
 
-## 17. Categories (planned, C-036)
+## 17. Categories (C-036)
 
 A category is a broad label over history, defined in `config.toml` and applied when the
 history is read. Nothing is stored, so the stored command is never touched, editing a rule
@@ -753,13 +753,18 @@ otherwise does frecency choose between it and `gdt-platform-launch`.
 **First matching rule wins the marker**, so order is priority. `devops` comes before
 `content` so that a `curl` to an elastic host is devops, not a download.
 
-A draft — the shape to build to, not a promise of field names:
+### 17.1 The rules (agreed 2026-09-27)
+
+In `config.toml` (`hit path config`). The owner's set, as it would be written:
 
 ```toml
 [[category]]
-name     = "devops"
-match    = '(?i)elastic|^(Invoke-Command|Enter-PSSession)\b'
-cwd      = '~\scripts\**'     # anything run from the scripts tree, whatever it is called
+name     = "devops"               # required, unique: what the filter and the header show
+color    = "yellow"               # optional: an ANSI colour name or "#rrggbb"; default dim
+mark     = "D"                    # optional: one character, for NO_COLOR; default first letter
+commands = ["Invoke-Command", "Enter-PSSession"]
+match    = '(?i)elastic'
+cwd      = ['~\dev\ops-scripts\**']
 
 [[category]]
 name     = "git"
@@ -767,8 +772,7 @@ commands = ["git", "gh"]
 
 [[category]]
 name     = "navigation"
-kind     = "cd"                # the recorded directory changes, or
-commands = ["cd", "sl", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
+commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
 
 [[category]]
 name     = "content"
@@ -780,13 +784,81 @@ name     = "environment"
 match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 ```
 
-Within one rule, `commands`, `match`, `cwd` and `kind` are alternatives: any one matching
-is enough. Rules that need two conditions at once ("directories, but only on a share") are
-left open until one is actually wanted. `navigation` is the exception: it
-is predefined because the directory finder depends on it, and it can still be overridden
-here.
+- **`commands`** compares the first word, ignoring case. A leading call operator (`&` or
+  `.`) and quotes are skipped, and a path matches by its file name with or without the
+  extension, so `.\scripts\Get-EsProcessTree.ps1` matches `Get-EsProcessTree`. Listing a
+  script by name is how a forgotten script becomes findable.
+- **`match`** is a regex over the whole command. It is Go's RE2, not .NET's: no lookaround
+  and no backreferences. A pattern that does not compile is reported when the config is
+  loaded, never silently treated as "matches nothing".
+- **`cwd`** is one or more globs over the directory the command ran in. `~` expands to the
+  home directory, `**` crosses any number of levels, and on Windows the comparison ignores
+  case and treats `/` and `\` alike.
+- **Any one field is enough** within a rule. A command may fall in several categories: the
+  filter matches any of them, and the first matching rule in file order decides the row's
+  mark, so order is priority.
+- **Chains and blocks are never categorised**, whichever field would have matched. A
+  pipeline that starts with the word still counts. Until the shell records shape (S-034),
+  Go calls a command a chain when it has a `;`, `&&` or `||` outside quotes, or starts with
+  `& {`, `. {` or `{`. A per-rule opt-in is left open until one is wanted.
+- **Directory visits are not categorised yet.** The finder shows commands; directory rows
+  arrive with T-011, and `kind = "cd"` with them. Until then `navigation` means the
+  commands you typed.
+- **A broken config never breaks Ctrl+R.** A rule with an error is skipped and the error is
+  reported (by `hit categories`, and in the finder's header); a missing file means no
+  categories. Unknown fields are errors, so a typo like `comands` is caught, not ignored.
+- **Nothing ships predefined.** The example above is documentation.
+- **The resident server reloads the file when its modified time changes.** That is a stat of
+  a local file, which the hot-path rule allows; it forbids spawning, the network and remote
+  paths.
+
+**In the finder** (T-012): a one-cell mark at the start of each categorised row, in the
+category's colour, and nothing at all on an uncategorised one. **Alt+G** cycles the
+category filter (all → each category in file order → all), and the header names it
+permanently, as it does scope and sort. `hit search --category git` does the same outside
+the finder. **Alt+Z** is set aside for the directory finder (T-011).
+
+**Tuning** is `hit categories`: each category with its count and most frequent commands,
+then the most frequent commands with **no** category, which is where `devops` grows from.
+`hit categories --explain "<command>"` says which rule matched, on which field, or why none
+did (including "it is a chain").
 
 **`environment` brings secrets closer to the surface.** `$x = Get-Credential` records
 nothing secret, but `$env:TOKEN = 'abc…'` has already stored the token in plain text, and a
 category that gathers such lines makes them easier to find — for anyone reading the file.
 Secret redaction (C-014) becomes more pressing, not less, once this exists.
+
+## 18. The captured environment (planned, C-037)
+
+What a session was pointed at is part of what a command meant. `Set-ElasticEnv PROD` changes
+nothing in the command that follows it, yet decides what that command did. So the shell
+records the state of a few chosen variables — not on every command, but when they change.
+
+```toml
+[capture]
+env = ["ELASTIC_ENV", "ES_URL", "ES_USER", "AWS_PROFILE"]   # names, or globs like "ES_*"
+```
+
+- **An allowlist, owned by the config.** Nothing is captured unless named. The owner decides
+  what is safe, which is the only person who can.
+- **Secret-looking names never have their values written**, even when listed or caught by a
+  glob: anything matching `*PASS*`, `*PWD*`, `*TOKEN*`, `*SECRET*`, `*KEY*` or `*CRED*`
+  (ignoring case) is recorded as set or unset, never by value. "Was the credential set?" is
+  worth knowing and costs nothing to store. So `ES_*` cannot leak `ES_PASSWORD`, and a
+  naked `_PWD` cannot leak however it is caught. The block list is not configurable
+  downwards.
+- **Changes, not every command.** The prompt hook compares the listed variables with what it
+  last wrote — a handful of in-process reads, no process — and appends an `env` record only
+  when one differs, plus one when the session starts. The state in force for any command is
+  the last `env` record before it in its session. So `Set-ElasticEnv PROD` appears in the
+  history at the moment it happened, and "what was set when I fired that elastic call" has an
+  answer without making every command record bigger.
+- **A new record kind, schema first** (C-022): `{"k":"env","id":…,"t":…,"session":…,
+  "vars":{"ELASTIC_ENV":"prod","ES_PASSWORD":{"set":true}}}`. Readers already skip kinds
+  they do not know and count them, so an older binary reading a newer file loses nothing.
+- **The shell does the capturing**, so `hit init` compiles the list into the script, as it
+  will guards. Changing the list takes a new shell until config reload exists (C-013).
+- Uses: the finder's preview shows the state a command ran under; a filter layer (T-013)
+  narrows to "while ELASTIC_ENV was prod"; and the guard (§9.1) reads the same variables
+  live, so the rule that protects the present and the record that explains the past agree
+  on names.
