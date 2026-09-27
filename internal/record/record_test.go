@@ -39,6 +39,8 @@ func TestEncodeRejectsInvalid(t *testing.T) {
 		{K: KindEnd},
 		{K: KindDel},
 		{K: KindCd},
+		{K: KindEnv, Vars: map[string]*EnvValue{}},
+		{K: KindEnv, TS: "2026-09-27T10:00:00.000Z"},
 		{K: "nope", ID: "x", Cmd: "ls"},
 	} {
 		if _, err := Encode(r); err != ErrInvalid {
@@ -117,4 +119,46 @@ func FuzzCommandRoundTrip(f *testing.F) {
 			t.Fatalf("round trip changed command:\n in: %q\nout: %q", cmd, got.Cmd)
 		}
 	})
+}
+
+func TestEnvRoundTrip(t *testing.T) {
+	prod := "prod"
+	r := &Record{K: KindEnv, TS: "2026-09-27T10:00:00.000Z", Sh: "pwsh", Sid: "s", Vars: map[string]*EnvValue{
+		"ELASTIC_ENV": {Value: prod},
+		"ES_PASSWORD": {Hidden: true},
+		"AWS_PROFILE": nil,
+	}}
+	b, err := Encode(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"vars":{"AWS_PROFILE":null,"ELASTIC_ENV":"prod","ES_PASSWORD":{"set":true}}`
+	if !bytes.Contains(b, []byte(want)) {
+		t.Fatalf("got %s, want it to contain %s", b, want)
+	}
+	got, err := Decode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Valid() || got.Vars["AWS_PROFILE"] != nil || *got.Vars["ELASTIC_ENV"] != (EnvValue{Value: prod}) ||
+		!got.Vars["ES_PASSWORD"].Hidden {
+		t.Fatalf("round trip: %+v", got.Vars)
+	}
+}
+
+// Nothing listed is set: still a snapshot, so the empty map is written, not dropped.
+func TestEnvWithNoVarsIsKept(t *testing.T) {
+	b, err := Encode(&Record{K: KindEnv, TS: "2026-09-27T10:00:00.000Z", Vars: map[string]*EnvValue{}})
+	if err != nil || !bytes.Contains(b, []byte(`"vars":{}`)) {
+		t.Fatalf("%s %v", b, err)
+	}
+	if b, _ := Encode(&Record{K: KindCd, Dir: "x"}); bytes.Contains(b, []byte("vars")) {
+		t.Fatalf("vars on a cd record: %s", b)
+	}
+}
+
+func TestEnvRejectsAHiddenValueThatIsNotSet(t *testing.T) {
+	if _, err := Decode([]byte(`{"k":"env","ts":"2026-09-27T10:00:00.000Z","vars":{"X":{"set":false}}}`)); err == nil {
+		t.Fatal("want error: an unset variable is null")
+	}
 }

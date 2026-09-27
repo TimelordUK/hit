@@ -26,6 +26,16 @@ foreach ($case in $doc.RootElement.EnumerateArray()) {
     }
     if ($null -ne ($v = & $get 'exit')) { $p.ExitCode = $v.GetInt32() }
     if ($null -ne ($v = & $get 'ms')) { $p.DurationMs = $v.GetInt64() }
+    if ($null -ne ($v = & $get 'vars')) {
+        $p.Vars = [ordered]@{}
+        foreach ($e in $v.EnumerateObject()) {
+            $p.Vars[$e.Name] = switch ($e.Value.ValueKind) {
+                'String' { $e.Value.GetString() }
+                'Null' { $null }
+                default { New-HitHiddenValue }
+            }
+        }
+    }
 
     $generate = [System.Text.Json.JsonElement]::new()
     if ($case.TryGetProperty('generate', [ref]$generate) -and $generate.GetBoolean()) {

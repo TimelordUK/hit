@@ -7,7 +7,7 @@
   "required": ["k"],
   "additionalProperties": false,
   "properties": {
-    "k":    { "enum": ["cmd", "end", "cd", "del"] },
+    "k":    { "enum": ["cmd", "end", "cd", "del", "env"] },
     "id":   { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "ULID" },
     "ts":   { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$", "description": "UTC, millisecond precision" },
     "cmd":  { "type": "string", "minLength": 1, "description": "The command exactly as typed" },
@@ -18,12 +18,23 @@
     "sid":  { "type": "string", "minLength": 1 },
     "src":  { "type": "string", "minLength": 1, "examples": ["psreadline", "mcfly", "zsh", "atuin"] },
     "exit": { "type": "integer" },
-    "ms":   { "type": "integer", "minimum": 0 }
+    "ms":   { "type": "integer", "minimum": 0 },
+    "vars": {
+      "type": "object",
+      "description": "env: every captured variable (DESIGN §18). A value; {\"set\":true} for a secret-looking name, whose value is never stored; null when unset",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "null" },
+          { "type": "object", "required": ["set"], "additionalProperties": false, "properties": { "set": { "const": true } } }
+        ]
+      }
+    }
   },
   "allOf": [
     {
       "if":   { "properties": { "k": { "const": "cmd" } } },
-      "then": { "required": ["id", "ts", "cmd", "sh"], "not": { "anyOf": [ { "required": ["dir"] }, { "required": ["exit"] }, { "required": ["ms"] } ] } }
+      "then": { "required": ["id", "ts", "cmd", "sh"], "not": { "anyOf": [ { "required": ["dir"] }, { "required": ["exit"] }, { "required": ["ms"] }, { "required": ["vars"] } ] } }
     },
     {
       "if":   { "properties": { "k": { "const": "end" } } },
@@ -36,6 +47,10 @@
     {
       "if":   { "properties": { "k": { "const": "del" } } },
       "then": { "required": ["id", "ts"], "propertyNames": { "enum": ["k", "id", "ts"] } }
+    },
+    {
+      "if":   { "properties": { "k": { "const": "env" } } },
+      "then": { "required": ["ts", "vars"], "propertyNames": { "enum": ["k", "ts", "sh", "host", "sid", "vars"] } }
     }
   ]
 }

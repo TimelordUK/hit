@@ -17,6 +17,7 @@ const (
 	KindEnd = "end" // command finished: exit code and duration, merged into its cmd by id
 	KindCd  = "cd"  // directory visited
 	KindDel = "del" // tombstone: hide the cmd with this id
+	KindEnv = "env" // the captured variables changed: the state from here on in its session (C-037)
 )
 
 // TimeLayout is the timestamp format writers use: UTC, millisecond precision.
@@ -38,6 +39,41 @@ type Record struct {
 	Src  string `json:"src,omitempty"`
 	Exit *int   `json:"exit,omitempty"`
 	Ms   *int64 `json:"ms,omitempty"`
+	// Vars is an env record's full state: every listed variable, nil when unset.
+	// omitzero, not omitempty: an env record where nothing is set still writes {}.
+	Vars map[string]*EnvValue `json:"vars,omitzero"`
+}
+
+// EnvValue is one captured variable (DESIGN §18). A secret-looking name is Hidden: only
+// that it was set is stored, written as {"set":true}; otherwise the value, as a string.
+type EnvValue struct {
+	Value  string
+	Hidden bool
+}
+
+func (v EnvValue) MarshalJSON() ([]byte, error) {
+	if v.Hidden {
+		return []byte(`{"set":true}`), nil
+	}
+	return json.Marshal(v.Value)
+}
+
+func (v *EnvValue) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		*v = EnvValue{}
+		return json.Unmarshal(b, &v.Value)
+	}
+	var h struct {
+		Set bool `json:"set"`
+	}
+	if err := json.Unmarshal(b, &h); err != nil {
+		return err
+	}
+	if !h.Set {
+		return errors.New(`record: env value must be a string, null or {"set":true}`)
+	}
+	*v = EnvValue{Hidden: true}
+	return nil
 }
 
 // Time parses TS. A missing or malformed timestamp gives the zero time rather than an
@@ -59,6 +95,8 @@ func (r *Record) Valid() bool {
 		return r.ID != ""
 	case KindCd:
 		return r.Dir != ""
+	case KindEnv:
+		return r.TS != "" && r.Vars != nil
 	}
 	return false
 }

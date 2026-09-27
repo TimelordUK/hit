@@ -86,12 +86,17 @@ func TestGoWriter(t *testing.T) {
 func TestSchemaRejectsBadRecords(t *testing.T) {
 	s := loadSchema(t)
 	for _, line := range []string{
-		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19T10:12:03.412Z","sh":"pwsh"}`,                  // no cmd
-		`{"k":"cmd","id":"not-a-ulid","ts":"2026-09-19T10:12:03.412Z","cmd":"ls","sh":"pwsh"}`,                       // bad id
-		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19 10:12","cmd":"ls","sh":"pwsh"}`,               // bad ts
-		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19T10:12:03.412Z","cmd":"ls","sh":"pwsh","x":1}`, // unknown key
-		`{"k":"end","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","exit":"0"}`,                                                   // exit not a number
-		`{"k":"end","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","cmd":"ls"}`,                                                   // key from another kind
+		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19T10:12:03.412Z","sh":"pwsh"}`,                      // no cmd
+		`{"k":"cmd","id":"not-a-ulid","ts":"2026-09-19T10:12:03.412Z","cmd":"ls","sh":"pwsh"}`,                           // bad id
+		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19 10:12","cmd":"ls","sh":"pwsh"}`,                   // bad ts
+		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19T10:12:03.412Z","cmd":"ls","sh":"pwsh","x":1}`,     // unknown key
+		`{"k":"end","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","exit":"0"}`,                                                       // exit not a number
+		`{"k":"end","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","cmd":"ls"}`,                                                       // key from another kind
+		`{"k":"env","ts":"2026-09-19T10:12:03.412Z"}`,                                                                    // no vars
+		`{"k":"env","ts":"2026-09-19T10:12:03.412Z","vars":{"X":{"set":false}}}`,                                         // unset is null
+		`{"k":"env","ts":"2026-09-19T10:12:03.412Z","vars":{"X":1}}`,                                                     // not a string
+		`{"k":"env","ts":"2026-09-19T10:12:03.412Z","vars":{},"cmd":"ls"}`,                                               // key from another kind
+		`{"k":"cmd","id":"01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZC","ts":"2026-09-19T10:12:03.412Z","cmd":"ls","sh":"pwsh","vars":{}}`, // vars on a cmd
 		`{"k":"nope"}`,
 	} {
 		v, _ := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(line)))

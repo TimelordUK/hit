@@ -58,7 +58,7 @@ function New-HitId([DateTimeOffset]$Time = (Get-HitNow)) {
 function New-HitRecord {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidateSet('cmd', 'end', 'cd', 'del')][string]$Kind,
+        [Parameter(Mandatory)][ValidateSet('cmd', 'end', 'cd', 'del', 'env')][string]$Kind,
         [string]$Id,
         [string]$Timestamp,
         [string]$Command,
@@ -68,7 +68,8 @@ function New-HitRecord {
         [string]$HostName,
         [string]$SessionId,
         [Nullable[int]]$ExitCode,
-        [Nullable[long]]$DurationMs
+        [Nullable[long]]$DurationMs,
+        [System.Collections.IDictionary]$Vars  # env: kept even when empty, like the Go writer
     )
     $r = [ordered]@{ k = $Kind }
     if ($Id) { $r.id = $Id }
@@ -81,13 +82,14 @@ function New-HitRecord {
     if ($SessionId) { $r.sid = $SessionId }
     if ($null -ne $ExitCode) { $r.exit = $ExitCode }
     if ($null -ne $DurationMs) { $r.ms = $DurationMs }
+    if ($null -ne $Vars) { $r.vars = $Vars }
     $r
 }
 
 # One JSON line, without the newline. JSON escapes CR/LF, so a multi-line command
 # can never split the line.
 function ConvertTo-HitJsonLine([System.Collections.Specialized.OrderedDictionary]$Record) {
-    ConvertTo-Json -InputObject $Record -Compress -Depth 2
+    ConvertTo-Json -InputObject $Record -Compress -Depth 3
 }
 
 # Appends one line to the history file, in-process. The file is opened denying other
@@ -182,6 +184,58 @@ function Invoke-HitAddToHistory([string]$Line) {
     $verdict
 }
 
+# Captured environment (C-037, DESIGN §18). The names come from [capture] env in
+# config.toml, compiled in by `hit init`. A secret-looking name's value is never written,
+# whatever the list says, and this pattern is not configurable.
+$script:HitCaptureEnv = @()      # names and globs; empty = capture nothing
+$script:HitLastEnv = $null       # the state last written, as a comparable string
+$script:HitSecretName = '(?i)PASS|PWD|TOKEN|SECRET|KEY|CRED'
+
+function New-HitHiddenValue { [ordered]@{ set = $true } }
+
+# The listed variables now, names sorted: the value, a hidden value for a secret-looking
+# name, $null when unset. A name is always present; a glob adds only what is set.
+# Environment reads only: no process, no disk.
+function Get-HitEnvState([string[]]$Names) {
+    $cmp = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $found = [System.Collections.Generic.SortedDictionary[string, string]]::new($cmp)
+    $all = $null
+    foreach ($n in $Names) {
+        if ([System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($n)) {
+            if ($null -eq $all) { $all = [Environment]::GetEnvironmentVariables() }
+            foreach ($k in $all.Keys) { if ($k -like $n) { $found[$k] = $all[$k] } }
+        } elseif (-not $found.ContainsKey($n)) {
+            $found[$n] = [Environment]::GetEnvironmentVariable($n)
+        }
+    }
+    $vars = [ordered]@{}
+    foreach ($k in $found.Keys) {
+        $v = $found[$k]
+        $vars[$k] = if ([string]::IsNullOrEmpty($v)) { $null }
+        elseif ($k -match $script:HitSecretName) { New-HitHiddenValue }
+        else { $v }
+    }
+    $vars
+}
+
+# Appends an env record when the listed variables differ from the last one written, so
+# the state in force for a command is the last env record before it in its session.
+function Write-HitEnv {
+    if ($script:HitCaptureEnv.Count -eq 0) { return }
+    $vars = Get-HitEnvState $script:HitCaptureEnv
+    $sb = [System.Text.StringBuilder]::new()
+    foreach ($k in $vars.Keys) {
+        $v = $vars[$k]
+        $null = $sb.Append($k).Append([char]0).Append(
+            $(if ($null -eq $v) { [char]1 } elseif ($v -is [string]) { "=$v" } else { [char]2 })).Append([char]0)
+    }
+    $state = $sb.ToString()
+    if ($state -ceq $script:HitLastEnv) { return }
+    $line = ConvertTo-HitJsonLine (New-HitRecord -Kind env -Timestamp (ConvertTo-HitTimestamp (Get-HitNow)) `
+            -Shell pwsh -HostName $script:HitHostName -SessionId $script:HitSessionId -Vars $vars)
+    if (Add-HitLine -Path $script:HitHistoryPath -Line $line) { $script:HitLastEnv = $state }
+}
+
 # The prompt hook body: the end record for the pending command, and a cd record when the
 # location changed. Idempotent, so being reached twice through a chain of wrappers is fine.
 # $At is when the prompt started (Stopwatch timestamp): the command's duration ends there,
@@ -205,6 +259,7 @@ function Invoke-HitPrompt([bool]$Success, $ExitCode, [long]$At = [System.Diagnos
                     New-HitRecord -Kind cd -Timestamp (ConvertTo-HitTimestamp (Get-HitNow)) -Dir $dir `
                         -Shell pwsh -HostName $script:HitHostName -SessionId $script:HitSessionId))
         }
+        Write-HitEnv
         # Something set its own AddToHistoryHandler after us (e.g. a later init script):
         # chain it and take over again.
         if ($script:HitHandler -and
@@ -247,11 +302,17 @@ function Register-HitPrompt {
 # Starts recording. Called at the end of `hit init pwsh` with the history path the Go
 # binary resolved, so there is one implementation of the path rules.
 function Enable-Hit {
-    param([Parameter(Mandatory)][string]$HistoryPath)
+    param(
+        [Parameter(Mandatory)][string]$HistoryPath,
+        [string[]]$CaptureEnv = @()  # [capture] env from config.toml (C-037)
+    )
     if (-not (Get-Module PSReadLine)) { return }  # not an interactive console host
     $script:HitHistoryPath = $HistoryPath
     $script:HitSessionId = New-HitId
     $script:HitLastDir = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
+    $script:HitCaptureEnv = @($CaptureEnv | Where-Object { $_ })
+    $script:HitLastEnv = $null
+    try { Write-HitEnv } catch { }  # the session's starting state
     Register-HitHistoryHandler
     Register-HitPrompt
     Register-HitKeyHandlers

@@ -55,6 +55,22 @@
     "record": { "k": "del", "id": "01K5HQ8ZJ2A7Q3M8V4W6X9Y0ZE", "ts": "2026-09-19T10:12:09.000Z" }
   },
   {
+    "name": "env: a value, a secret only as set, an unset variable, awkward characters",
+    "record": {
+      "k": "env", "ts": "2026-09-19T10:12:10.000Z", "sh": "pwsh", "host": "box1", "sid": "a1b2c3",
+      "vars": {
+        "AWS_PROFILE": null,
+        "ELASTIC_ENV": "prod",
+        "ES_PASSWORD": { "set": true },
+        "ES_URL": "https://elastic-prod-1:9200/?a=1&b=\"2\" caf\u00e9 C:\\x"
+      }
+    }
+  },
+  {
+    "name": "env: nothing listed is set",
+    "record": { "k": "env", "ts": "2026-09-19T10:12:11.000Z", "sh": "pwsh", "host": "box1", "sid": "a1b2c3", "vars": {} }
+  },
+  {
     "name": "writer generates id and ts from HIT_NOW",
     "generate": true,
     "record": { "k": "cmd", "cmd": "ls", "cwd": "C:\\dev", "sh": "pwsh", "host": "box1", "sid": "a1b2c3" }

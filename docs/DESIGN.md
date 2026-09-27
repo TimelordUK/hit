@@ -92,6 +92,8 @@ round-trip exactly. Short keys keep the file compact.
 {"k":"cd","ts":"…","dir":"\\\\elastic-prod-1\\logs","sh":"pwsh","host":"box1","sid":"a1b2c3"}
 // deletion (written by `hit rm` / Del in the finder)
 {"k":"del","id":"01J8Z…","ts":"…"}
+// captured variables changed (written by the prompt hook; §18)
+{"k":"env","ts":"…","sh":"pwsh","host":"box1","sid":"a1b2c3","vars":{"ELASTIC_ENV":"prod","ES_PASSWORD":{"set":true},"AWS_PROFILE":null}}
 ```
 
 - `id` is a ULID: sortable, unique across hosts without coordination.
@@ -833,7 +835,7 @@ nothing secret, but `$env:TOKEN = 'abc…'` has already stored the token in plai
 category that gathers such lines makes them easier to find — for anyone reading the file.
 Secret redaction (C-014) becomes more pressing, not less, once this exists.
 
-## 18. The captured environment (planned, C-037)
+## 18. The captured environment (C-037; recording done, reading planned)
 
 What a session was pointed at is part of what a command meant. `Set-ElasticEnv PROD` changes
 nothing in the command that follows it, yet decides what that command did. So the shell
@@ -858,11 +860,20 @@ env = ["ELASTIC_ENV", "ES_URL", "ES_USER", "AWS_PROFILE"]   # names, or globs li
   the last `env` record before it in its session. So `Set-ElasticEnv PROD` appears in the
   history at the moment it happened, and "what was set when I fired that elastic call" has an
   answer without making every command record bigger.
-- **A new record kind, schema first** (C-022): `{"k":"env","id":…,"t":…,"session":…,
-  "vars":{"ELASTIC_ENV":"prod","ES_PASSWORD":{"set":true}}}`. Readers already skip kinds
+- **Each record is the whole state, not a diff.** A listed name is always present, `null`
+  when unset; a glob contributes only the variables it matches that are set, so one that
+  disappears is simply absent from the next record. An empty value counts as unset. On
+  Windows names compare ignoring case, as the environment does.
+- **A new record kind, schema first** (C-022), shaped like `cd` (§4.2), with no id:
+  `{"k":"env","ts":…,"sh":…,"host":…,"sid":…,"vars":{"ELASTIC_ENV":"prod",
+  "ES_PASSWORD":{"set":true},"AWS_PROFILE":null}}`. `{"set":true}` is the only object a
+  value can be; an unset secret is `null` like anything else. Readers already skip kinds
   they do not know and count them, so an older binary reading a newer file loses nothing.
-- **The shell does the capturing**, so `hit init` compiles the list into the script, as it
-  will guards. Changing the list takes a new shell until config reload exists (C-013).
+- **Cost:** ~0.23 ms per prompt when nothing changed, with a glob in the list (2026-09-27).
+  Environment reads and a string compare; the file is only touched when something changed.
+- **The shell does the capturing**, so `hit init` compiles the list into the script
+  (`Enable-Hit -CaptureEnv @(…)`), as it will guards. A missing or broken config captures
+  nothing. Changing the list takes a new shell until config reload exists (C-013).
 - Uses: the finder's preview shows the state a command ran under; a filter layer (T-013)
   narrows to "while ELASTIC_ENV was prod"; and the guard (§9.1) reads the same variables
   live, so the rule that protects the present and the record that explains the past agree

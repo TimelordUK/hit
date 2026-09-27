@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,5 +50,28 @@ func TestInitPwshEmbedsHistoryPath(t *testing.T) {
 	want := "Enable-Hit -HistoryPath '" + strings.ReplaceAll(filepath.Join(`C:\it's here`, "history.jsonl"), "'", "''") + "'"
 	if !strings.Contains(out.String(), want) {
 		t.Fatalf("missing %q", want)
+	}
+}
+
+func TestInitPwshCompilesCaptureEnv(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(conf, []byte("[capture]\nenv = [\"ELASTIC_ENV\", \"ES_*\", \"it's\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := testEnv(map[string]string{"HIT_DATA_DIR": dir, "HIT_CONFIG": conf})
+	var out, errb bytes.Buffer
+	if code := run([]string{"init", "pwsh"}, env, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if want := " -CaptureEnv @('ELASTIC_ENV', 'ES_*', 'it''s')"; !strings.Contains(out.String(), want) {
+		t.Fatalf("missing %q", want)
+	}
+
+	// No config, or nothing to capture: no argument at all.
+	env = testEnv(map[string]string{"HIT_DATA_DIR": dir, "HIT_CONFIG": filepath.Join(dir, "none.toml")})
+	out.Reset()
+	if code := run([]string{"init", "pwsh"}, env, &out, &errb); code != 0 || strings.Contains(out.String(), "-CaptureEnv") {
+		t.Fatalf("exit %d, output mentions -CaptureEnv: %v", code, strings.Contains(out.String(), "-CaptureEnv"))
 	}
 }

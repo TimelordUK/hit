@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/TimelordUK/hit/internal/config"
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/shell"
 )
@@ -88,7 +89,12 @@ func runInit(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	if err != nil {
 		exe = "hit"
 	}
-	if err := shell.WritePwsh(stdout, hist, exe, version); err != nil {
+	// A config that is missing or broken captures nothing; `hit categories` reports why.
+	var capture []string
+	if conf, err := paths.ConfigFile(env); err == nil {
+		capture = config.Load(conf).Capture.Env
+	}
+	if err := shell.WritePwsh(stdout, hist, exe, version, capture); err != nil {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}

@@ -40,8 +40,8 @@ type Category struct {
 	Cwd      []string
 }
 
-// Capture is the [capture] table (DESIGN §18). Read now so that writing it is not an
-// error; nothing acts on it yet.
+// Capture is the [capture] table (DESIGN §18): the variables `hit init` compiles into the
+// shell script for its prompt hook to record.
 type Capture struct {
 	Env []string
 }

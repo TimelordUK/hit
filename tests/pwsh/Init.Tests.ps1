@@ -36,12 +36,14 @@ AfterAll {
     $function:global:prompt = $script:SavedPrompt
     Set-PSReadLineOption -AddToHistoryHandler $script:SavedHandler
     $env:HIT_DATA_DIR = $null
+    $env:HIT_CONFIG = $null
 }
 
 Describe 'hit init pwsh' {
     BeforeEach {
         $env:HIT_DATA_DIR = Join-Path $TestDrive "data-$([guid]::NewGuid())"
         $script:Hist = Join-Path $env:HIT_DATA_DIR 'history.jsonl'
+        $env:HIT_CONFIG = Join-Path $env:HIT_DATA_DIR 'config.toml'  # none: never the owner's
         Get-Module hit | Remove-Module
 
         $global:StarshipSaw = @()
@@ -118,6 +120,51 @@ Describe 'hit init pwsh' {
         Send-Line "$([char]6)$([char]6)" | Out-Null
         Send-Line " $([char]27)`t" | Out-Null
         Read-HitHistory | Should -BeNullOrEmpty
+    }
+
+    It 'records the listed variables at session start, then only when they change (C-037)' {
+        $null = New-Item -ItemType Directory -Force $env:HIT_DATA_DIR
+        Set-Content -LiteralPath $env:HIT_CONFIG -Value @'
+[capture]
+env = ["HIT_T_ENV", "HIT_T_ES_*", "HIT_T_MISSING"]
+'@
+        $env:HIT_T_ENV = 'dev'
+        $env:HIT_T_ES_URL = 'https://elastic-dev:9200'
+        $env:HIT_T_ES_PASSWORD = 'hunter2'
+        try {
+            Get-Module hit | Remove-Module                # re-init to read the config, not chaining the old hit
+            Set-PSReadLineOption -AddToHistoryHandler { param([string]$l) $true }
+            $function:global:prompt = { 'starship> ' }
+            Invoke-Expression (& $script:Exe init pwsh | Out-String)
+            Send-Line 'ls' | Out-Null
+            Show-Prompt | Out-Null                        # nothing changed: no env record
+            $env:HIT_T_ENV = 'prod'
+            Send-Line 'Set-ElasticEnv PROD' | Out-Null
+            Show-Prompt | Out-Null
+            $env:HIT_T_ES_PASSWORD = $null
+            Show-Prompt | Out-Null
+
+            $r = Read-HitHistory
+            $r.k | Should -Be @('env', 'cmd', 'end', 'cmd', 'end', 'env', 'env')
+            $start = $r[0]
+            $start.sid | Should -Be $r[1].sid
+            $start.vars.HIT_T_ENV | Should -Be 'dev'
+            $start.vars.HIT_T_ES_URL | Should -Be 'https://elastic-dev:9200'
+            $start.vars.HIT_T_ES_PASSWORD.set | Should -BeTrue
+            $start.vars.PSObject.Properties.Name | Should -Contain 'HIT_T_MISSING'
+            $start.vars.HIT_T_MISSING | Should -BeNullOrEmpty
+            $r[5].vars.HIT_T_ENV | Should -Be 'prod'
+            $r[6].vars.PSObject.Properties.Name | Should -Not -Contain 'HIT_T_ES_PASSWORD'  # glob: gone when unset
+            Get-Content -Raw -LiteralPath $script:Hist | Should -Not -Match 'hunter2'
+        } finally {
+            $env:HIT_T_ENV = $env:HIT_T_ES_URL = $env:HIT_T_ES_PASSWORD = $null
+        }
+    }
+
+    It 'captures nothing without a [capture] list' {
+        Send-Line 'ls' | Out-Null
+        Show-Prompt | Out-Null
+        (Read-HitHistory).k | Should -Not -Contain 'env'
     }
 
     It 'skips what the chained handler marks sensitive (PSReadLine default)' {
