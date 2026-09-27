@@ -114,9 +114,40 @@ hit search --scope all           # the finder, standalone
 hit search --print --limit 20    # same ranking, JSON lines, no TUI (for scripts and fzf)
 hit path history|data|config     # where things live
 hit status                       # resident finders: pid, parent, pipe, version
+hit categories                   # what each category catches, and what none do
 hit init pwsh                    # print the integration script
 hit version
 ```
+
+### Categories
+
+A few broad labels over your history, defined by you in `config.toml` (`hit path config`
+prints where). hit ships none. A rule matches a command's first word, a regex, or the
+directory it ran in:
+
+```toml
+[[category]]
+name     = "git"
+commands = ["git", "gh"]
+
+[[category]]
+name     = "devops"
+commands = ["Invoke-Command", "Enter-PSSession"]
+match    = '(?i)elastic'
+cwd      = ['~\dev\ops-scripts\**']
+```
+
+A pipeline that starts with the word counts; a `;` chain or a script block never does.
+Nothing is stored, so editing a rule relabels everything you have already run. To tune the
+rules against your own history:
+
+```powershell
+hit categories                                # counts, top commands, and the most
+                                              # frequent commands with no category
+hit categories --explain "git log | sls fix"  # which rule matched, and why
+```
+
+Full rules: [DESIGN §17.1](docs/DESIGN.md).
 
 ### Turning it off
 

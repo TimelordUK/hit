@@ -3,6 +3,7 @@ module github.com/TimelordUK/hit
 go 1.25.0
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0

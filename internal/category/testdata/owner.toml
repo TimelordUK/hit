@@ -1,0 +1,27 @@
+# The owner's working set (DESIGN §17.1), as it would be written. Order is priority:
+# devops first, so a curl to an elastic host is devops rather than content.
+
+[[category]]
+name     = "devops"
+color    = "yellow"
+commands = ["Invoke-Command", "Enter-PSSession", "Get-EsProcessTree"]
+match    = '(?i)elastic-(prod|uat)'
+cwd      = ['~\dev\ops-scripts\**', '\\ops-share\**']
+
+[[category]]
+name     = "git"
+color    = "blue"
+commands = ["git", "gh"]
+
+[[category]]
+name     = "navigation"
+commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
+
+[[category]]
+name     = "content"
+commands = ["Invoke-WebRequest", "iwr", "curl", "wget",
+            "Expand-Archive", "Compress-Archive", "tar", "7z", "unzip"]
+
+[[category]]
+name     = "environment"
+match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
