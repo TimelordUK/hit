@@ -705,6 +705,8 @@ function Invoke-HitFinder {
         }
         if ($choice -and $choice.action -in @('insert', 'edit') -and $choice.cmd) {
             & $script:HitEditor.SetBuffer $choice.cmd
+        } elseif ($choice -and $choice.action -eq 'yank' -and $choice.cmd) {
+            & $script:HitClipboard $choice.cmd
         }
     } catch {
         # Principle 7: a broken finder must never break the prompt.
@@ -719,6 +721,26 @@ function Invoke-HitFinder {
 }
 
 $script:HitScope = 'all'
+
+# The terminal's clipboard sequence: ESC ] 52 ; c ; <base64 UTF-8> BEL.
+function Format-HitOsc52([string]$Text) {
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Text))
+    "$([char]27)]52;c;$b64$([char]7)"
+}
+
+# Ctrl+Y in the finder (T-014). Windows: Set-Clipboard, in process. Elsewhere Set-Clipboard
+# needs xclip and a display, which SSH, WSL and headless boxes lack, so OSC 52 asks the
+# terminal too (Windows Terminal and Zellij pass it on); a terminal that doesn't know it
+# ignores it. Only runs on a yank, never on the prompt path.
+$script:HitClipboard = {
+    param([string]$Text)
+    if ($IsWindows) {
+        Set-Clipboard -Value $Text
+        return
+    }
+    [Console]::Write((Format-HitOsc52 $Text))
+    try { Set-Clipboard -Value $Text -ErrorAction Stop } catch { Write-HitDebug "Set-Clipboard: $_" }
+}
 
 # Binds Ctrl+R. In vi edit mode a chord must be bound per vi mode, and the owner uses
 # `Set-PSReadLineOption -EditMode vi`, so bind insert and command mode too (DESIGN §14.1).

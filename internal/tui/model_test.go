@@ -58,6 +58,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlZ}
 	case "ctrl+u":
 		return tea.KeyMsg{Type: tea.KeyCtrlU}
+	case "ctrl+y":
+		return tea.KeyMsg{Type: tea.KeyCtrlY}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
@@ -134,6 +136,25 @@ func TestTabEditsAndEscCancels(t *testing.T) {
 	m := send(testModel(t), "esc")
 	if m.Choice == nil || m.Choice.Action != ActionCancel || m.Choice.Cmd != "" {
 		t.Errorf("esc: %+v", m.Choice)
+	}
+}
+
+// Ctrl+Y hands the selection to the shell for the clipboard and closes, leaving the
+// prompt alone (T-014). Closing rather than staying open was the owner's call: reopening
+// is one key and quick, and it keeps the clipboard in the shell rather than the binary.
+func TestCtrlYYanksTheSelectionVerbatim(t *testing.T) {
+	m := send(testModel(t), "rest", "ctrl+y")
+	if m.Choice == nil || m.Choice.Action != ActionYank {
+		t.Fatalf("choice = %+v", m.Choice)
+	}
+	if !strings.HasPrefix(m.Choice.Cmd, "Invoke-RestMethod") || !strings.Contains(m.Choice.Cmd, "\n") {
+		t.Errorf("multi-line command not yanked verbatim: %q", m.Choice.Cmd)
+	}
+	if m.Choice.ID != "C" {
+		t.Errorf("id = %q", m.Choice.ID)
+	}
+	if got := send(testModel(t), "zzzz", "ctrl+y").Choice; got == nil || got.Action != ActionCancel {
+		t.Errorf("yank with nothing selected: %+v", got)
 	}
 }
 

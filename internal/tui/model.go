@@ -20,6 +20,7 @@ type Action string
 const (
 	ActionInsert Action = "insert" // put the command in the prompt, don't run it
 	ActionEdit   Action = "edit"   // put it in the prompt and keep the finder's text
+	ActionYank   Action = "yank"   // copy to the clipboard, leave the prompt untouched (T-014)
 	ActionCancel Action = "cancel" // leave the prompt untouched
 )
 
@@ -216,6 +217,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "tab":
 		m.finish(ActionEdit)
+		return m, tea.Quit
+	case "ctrl+y": // yank: the shell owns the clipboard, so hand it over and close (T-014)
+		m.finish(ActionYank)
 		return m, tea.Quit
 	case "up":
 		m.cursor--

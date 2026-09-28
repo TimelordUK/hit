@@ -98,6 +98,40 @@ Describe 'Invoke-HitFinder' {
         $script:Editor.Redraws | Should -Be 1
     }
 
+    It 'yanks to the clipboard and leaves the prompt untouched (T-014)' {
+        $cmd = "Invoke-RestMethod ``n    -Uri https://elastic-prod-1:9200/_search"
+        Use-FakeEditor -Buffer 'half typed'
+        $script:Yanked = [System.Collections.Generic.List[string]]::new()
+        $yanked = $script:Yanked
+        $script:HitClipboard = { param([string]$Text) $yanked.Add($Text) }.GetNewClosure()
+        Use-FakeRunner @{ action = 'yank'; cmd = $cmd }
+        Invoke-HitFinder
+        $script:Yanked | Should -HaveCount 1
+        $script:Yanked[0] | Should -BeExactly $cmd
+        $script:Editor.Buffer | Should -Be 'half typed'
+        $script:Editor.Redraws | Should -BeGreaterOrEqual 1
+    }
+
+    It 'does not touch the clipboard on insert or cancel' {
+        Use-FakeEditor
+        $script:Yanked = [System.Collections.Generic.List[string]]::new()
+        $yanked = $script:Yanked
+        $script:HitClipboard = { param([string]$Text) $yanked.Add($Text) }.GetNewClosure()
+        Use-FakeRunner @{ action = 'insert'; cmd = 'git status' }
+        Invoke-HitFinder
+        Use-FakeRunner @{ action = 'cancel' }
+        Invoke-HitFinder
+        $script:Yanked | Should -HaveCount 0
+    }
+
+    It 'never throws into the session when the clipboard fails' {
+        Use-FakeEditor -Buffer 'typed'
+        $script:HitClipboard = { param([string]$Text) throw 'no clipboard' }
+        Use-FakeRunner @{ action = 'yank'; cmd = 'git status' }
+        { Invoke-HitFinder } | Should -Not -Throw
+        $script:Editor.Buffer | Should -Be 'typed'
+    }
+
     It 'cleans up its temp file' {
         Use-FakeEditor
         $script:Runner = [pscustomobject]@{ Arguments = $null }
@@ -109,6 +143,16 @@ Describe 'Invoke-HitFinder' {
         }.GetNewClosure()
         Invoke-HitFinder
         Get-Arg '--out' | Should -Not -Exist
+    }
+}
+
+Describe 'Format-HitOsc52' {
+    # Linux pwsh's Set-Clipboard needs xclip and a display, which SSH, WSL and headless
+    # boxes lack; OSC 52 asks the terminal instead (Windows Terminal, Zellij pass it on).
+    It 'encodes the text as UTF-8 base64 in an OSC 52 clipboard sequence' {
+        $text = "Get-Item ``n  -Path 'ü'"
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        Format-HitOsc52 $text | Should -BeExactly "$([char]27)]52;c;$b64$([char]7)"
     }
 }
 

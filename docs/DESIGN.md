@@ -191,7 +191,9 @@ the display:
 {"action":"insert","cmd":"Invoke-RestMethod `\n  -Uri …","id":"01J8Z…","deleted":["01J8Y…"]}
 ```
 
-`action` is `insert`, `edit` or `cancel`; `deleted` lists ids the finder tombstoned. The key
+`action` is `insert`, `edit`, `yank` or `cancel`; `deleted` lists ids the finder tombstoned.
+`yank` leaves the prompt untouched and the shell puts `cmd` on the clipboard (T-014): the
+shell knows its platform, so the binary never touches a clipboard. The key
 handler reads the file through a line-editor adapter (`GetBuffer`/`SetBuffer`/`Redraw`) that
 tests replace with a fake, so handlers run with no keyboard (DESIGN §13.1).
 
@@ -213,6 +215,7 @@ routes cannot drift apart.
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |
 | Tab | put it in the prompt (`edit`) |
+| Ctrl+Y | yank: copy the command, verbatim, to the clipboard and close; the prompt is untouched. Windows uses `Set-Clipboard`; elsewhere OSC 52 goes to the terminal as well, since `Set-Clipboard` there needs xclip and a display that SSH, WSL and headless boxes lack. Closing rather than staying open was decided from use: reopening is one key |
 | Ctrl+X | hide/show commands that failed |
 | Del / Ctrl+Z | tombstone the selection / undo, while the finder is open |
 | Esc / Ctrl+C | cancel, prompt untouched |
