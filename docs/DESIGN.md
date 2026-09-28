@@ -303,6 +303,9 @@ session bonuses look at every run of that command, not just the latest.
 - **Alt chords are not typed into the filter.** They belong to the shell (Alt+M is the
   prompt's one-line/many-lines toggle) and arrive as ordinary runes, so the finder must
   drop them explicitly or the key silently filters instead of doing nothing.
+- **Control characters are not typed into the filter either.** On Windows a bare Ctrl
+  press arrives as a NUL rune (the console reader drops only a bare Shift), and typed in, it
+  emptied the list before the chord it belonged to had even arrived (T-016).
 - **Ranking:** match quality × recency × frequency, boosted for same directory and
   successful exit. Duplicates collapse into one entry showing a run count and last-run time.
 

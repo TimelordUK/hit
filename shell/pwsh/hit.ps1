@@ -649,6 +649,7 @@ function Invoke-HitFinderOnServer([string]$Query) {
         Write-HitDebug ("server error: " + $res.error)
         return $null
     }
+    Write-HitDebug ("server choice: action={0} len(cmd)={1}" -f $res.action, "$($res.cmd)".Length)
     $res
 }
 

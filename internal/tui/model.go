@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/search"
@@ -291,8 +292,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Alt chords belong to the shell (Alt+M is the prompt's one-line/many-lines
 		// toggle). They arrive here as ordinary runes, so without this they get typed
 		// into the filter and the key looks like it did nothing at all.
+		//
+		// Control characters are dropped too: on Windows a bare Ctrl press arrives as a
+		// NUL rune, which emptied the list the moment Ctrl went down (T-016).
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && !msg.Alt {
-			m.query.Text += string(msg.Runes)
+			typed := strings.Map(func(r rune) rune {
+				if unicode.IsControl(r) {
+					return -1
+				}
+				return r
+			}, string(msg.Runes))
+			if typed == "" {
+				break
+			}
+			m.query.Text += typed
 			m.cursor, m.top = 0, 0
 			m.refresh()
 		}
