@@ -28,3 +28,6 @@ Set-PSReadLineKeyHandler -Chord 'Ctrl+g' `
 # rg and fd generate their own completions (Windows loads them from chocolatey)
 rg --generate complete-powershell | Out-String | Invoke-Expression
 fd --gen-completions powershell 2>$null | Out-String | Invoke-Expression
+
+$env:HIT_SERVER = 1
+$env:HIT_TIMING = 1

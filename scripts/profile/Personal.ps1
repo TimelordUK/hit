@@ -1,0 +1,1 @@
+if (Test-Path ~/dev/sql-cli/scripts/lrt.ps1) { . ~/dev/sql-cli/scripts/lrt.ps1 }

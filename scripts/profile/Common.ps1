@@ -256,4 +256,6 @@ function lt {
     eza --tree --level=$depth --icons --group-directories-first @rest
 }
 
-if (Test-Path ~/dev/sql-cli/scripts/lrt.ps1) { . ~/dev/sql-cli/scripts/lrt.ps1 }
+if (Test-Path ~/dev/hit/scripts/profile/Personal.ps1) { . ~/dev/hit/scripts/profile/Personal.ps1 }
+
+
