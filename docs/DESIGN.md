@@ -215,6 +215,7 @@ routes cannot drift apart.
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |
 | Tab | put it in the prompt (`edit`) |
+| Alt+W | put it in the prompt wrapped to run **where it ran** and come back: `Push-Location -LiteralPath '<dir>' -ErrorAction Stop; try { … } finally { Pop-Location }` (T-017). The finder hands back the command and its recorded directory (`"action":"there","cwd":…`) and the shell builds the wrapper in its own syntax; the stored command is untouched. `-ErrorAction Stop` means a directory that has gone stops the whole input instead of running the command where you are; nothing is stat'ed. A command with a newline or `#` gets the wrapper on separate lines, the command unindented so here-strings survive. Recorded here, or no directory known: the plain command |
 | Ctrl+Y | yank: copy the command, verbatim, to the clipboard and close; the prompt is untouched. Windows uses `Set-Clipboard`; elsewhere OSC 52 goes to the terminal as well, since `Set-Clipboard` there needs xclip and a display that SSH, WSL and headless boxes lack. Closing rather than staying open was decided from use: reopening is one key |
 | Ctrl+X | hide/show commands that failed |
 | Del / Ctrl+Z | tombstone the selection / undo, while the finder is open |

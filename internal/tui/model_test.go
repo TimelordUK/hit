@@ -158,6 +158,23 @@ func TestCtrlYYanksTheSelectionVerbatim(t *testing.T) {
 	}
 }
 
+// Alt+W: run it where it ran (T-017). The finder hands back the command untouched and the
+// directory it was recorded in; the shell builds the round trip, in its own syntax.
+func TestAltWHandsBackTheCommandAndWhereItRan(t *testing.T) {
+	m := send(testModel(t), "rest")
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}, Alt: true})
+	m = tm.(Model)
+	if m.Choice == nil || m.Choice.Action != ActionThere {
+		t.Fatalf("choice = %+v", m.Choice)
+	}
+	if !strings.HasPrefix(m.Choice.Cmd, "Invoke-RestMethod") || m.Choice.Cwd != `\\elastic-prod-1\logs` {
+		t.Errorf("got cmd %q cwd %q", m.Choice.Cmd, m.Choice.Cwd)
+	}
+	if m.Query().Text != "rest" {
+		t.Errorf("alt+w must not type a w: %q", m.Query().Text)
+	}
+}
+
 func TestEnterWithNoMatchesCancels(t *testing.T) {
 	m := send(testModel(t), "zzzz", "enter")
 	if m.Choice == nil || m.Choice.Action != ActionCancel {

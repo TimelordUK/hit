@@ -17,6 +17,7 @@ import (
 	"github.com/TimelordUK/hit/internal/paths"
 	"github.com/TimelordUK/hit/internal/search"
 	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/internal/tui"
 )
 
 // The resident finder (C-031).
@@ -57,6 +58,7 @@ type Response struct {
 	Action  string   `json:"action,omitempty"`
 	Cmd     string   `json:"cmd,omitempty"`
 	ID      string   `json:"id,omitempty"`
+	Cwd     string   `json:"cwd,omitempty"`
 	Deleted []string `json:"deleted,omitempty"`
 	Pong    bool     `json:"pong,omitempty"`
 	Error   string   `json:"error,omitempty"`
@@ -349,7 +351,13 @@ func (s *server) finder(r Request) Response {
 			debugf(s.env, "serve: could not delete: %v", terr)
 		}
 	}
+	return responseFor(choice)
+}
+
+// responseFor is the finder's choice as the server sends it: the same JSON the cold path
+// writes to --out, field for field, so a key never does less through the server.
+func responseFor(c *tui.Choice) Response {
 	return Response{
-		Action: string(choice.Action), Cmd: choice.Cmd, ID: choice.ID, Deleted: choice.Deleted,
+		Action: string(c.Action), Cmd: c.Cmd, ID: c.ID, Cwd: c.Cwd, Deleted: c.Deleted,
 	}
 }

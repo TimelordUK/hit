@@ -112,6 +112,15 @@ Describe 'Invoke-HitFinder' {
         $script:Editor.Redraws | Should -BeGreaterOrEqual 1
     }
 
+    It 'puts the round trip in the prompt for Alt+W, not running it (T-017)' {
+        Use-FakeEditor -Buffer 'rest'
+        $elsewhere = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')
+        Use-FakeRunner @{ action = 'there'; cmd = 'git status'; cwd = $elsewhere }
+        Invoke-HitFinder
+        $script:Editor.Buffer | Should -BeExactly (Format-HitRunThere 'git status' $elsewhere (Get-Location).ProviderPath)
+        $script:Editor.Buffer | Should -Match 'Push-Location'
+    }
+
     It 'does not touch the clipboard on insert or cancel' {
         Use-FakeEditor
         $script:Yanked = [System.Collections.Generic.List[string]]::new()
@@ -143,6 +152,48 @@ Describe 'Invoke-HitFinder' {
         }.GetNewClosure()
         Invoke-HitFinder
         Get-Arg '--out' | Should -Not -Exist
+    }
+}
+
+Describe 'Format-HitRunThere' {
+    # Alt+W (T-017): run a command in the directory it was recorded in, and come back.
+    # -ErrorAction Stop matters: if the directory is gone, nothing after it may run.
+    It 'wraps a one-line command in a round trip on one line' {
+        Format-HitRunThere 'git status' 'C:\dev\hit' 'C:\Users\me' |
+            Should -BeExactly "Push-Location -LiteralPath 'C:\dev\hit' -ErrorAction Stop; try { git status } finally { Pop-Location }"
+    }
+
+    It 'quotes the directory for a single-quoted string' {
+        Format-HitRunThere 'ls' "C:\bob's stuff" 'C:\' |
+            Should -BeExactly "Push-Location -LiteralPath 'C:\bob''s stuff' -ErrorAction Stop; try { ls } finally { Pop-Location }"
+    }
+
+    It 'puts a multi-line command on its own lines, unindented, so here-strings survive' {
+        $cmd = "`$x = @`"`nhello`n`"@`nWrite-Output `$x"
+        Format-HitRunThere $cmd 'C:\dev' 'C:\' |
+            Should -BeExactly ("Push-Location -LiteralPath 'C:\dev' -ErrorAction Stop`ntry {`n" + $cmd + "`n} finally { Pop-Location }")
+    }
+
+    It 'goes multi-line when a comment would swallow the closing brace' {
+        Format-HitRunThere 'git status # check' 'C:\dev' 'C:\' |
+            Should -BeExactly "Push-Location -LiteralPath 'C:\dev' -ErrorAction Stop`ntry {`ngit status # check`n} finally { Pop-Location }"
+    }
+
+    It 'leaves the command alone when it ran here, or nobody knows where' {
+        Format-HitRunThere 'git status' 'C:\dev\hit' 'C:\dev\hit' | Should -BeExactly 'git status'
+        if ($IsWindows) { # case and a trailing separator do not make it another folder there
+            Format-HitRunThere 'git status' 'C:\dev\hit\' 'c:\DEV\hit' | Should -BeExactly 'git status'
+        }
+        Format-HitRunThere 'git status' '' 'C:\dev\hit' | Should -BeExactly 'git status'
+    }
+
+    It 'produces a command that parses' {
+        foreach ($c in 'git status', 'git status # x', "Get-Item ``n  -Path x") {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput(
+                (Format-HitRunThere $c 'C:\dev' 'C:\'), [ref]$null, [ref]$errs)
+            $errs | Should -BeNullOrEmpty
+        }
     }
 }
 

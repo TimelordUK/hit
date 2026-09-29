@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TimelordUK/hit/internal/ipc"
+	"github.com/TimelordUK/hit/internal/tui"
 )
 
 // dialAndAsk sends one request and reads one response.
@@ -277,5 +278,17 @@ func TestRequestsAreServedSerially(t *testing.T) {
 	defer mu.Unlock()
 	if peak > 1 {
 		t.Errorf("%d finders drew at once; there is only one console", peak)
+	}
+}
+
+// The served answer must carry everything the cold path writes, or a key works when the
+// finder is spawned and silently does less through the server. Alt+W's directory is the
+// field most likely to be left behind (T-017).
+func TestServedResponseCarriesTheWholeChoice(t *testing.T) {
+	c := &tui.Choice{Action: tui.ActionThere, Cmd: "git status", ID: "A", Cwd: `C:\dev\hit`, Deleted: []string{"B"}}
+	cold, _ := json.Marshal(c)
+	warm, _ := json.Marshal(responseFor(c))
+	if string(cold) != string(warm) {
+		t.Errorf("served answer differs from the spawned one:\n cold %s\n warm %s", cold, warm)
 	}
 }

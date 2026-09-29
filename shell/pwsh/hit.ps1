@@ -708,6 +708,9 @@ function Invoke-HitFinder {
             & $script:HitEditor.SetBuffer $choice.cmd
         } elseif ($choice -and $choice.action -eq 'yank' -and $choice.cmd) {
             & $script:HitClipboard $choice.cmd
+        } elseif ($choice -and $choice.action -eq 'there' -and $choice.cmd) {
+            $here = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
+            & $script:HitEditor.SetBuffer (Format-HitRunThere $choice.cmd $choice.cwd $here)
         }
     } catch {
         # Principle 7: a broken finder must never break the prompt.
@@ -722,6 +725,25 @@ function Invoke-HitFinder {
 }
 
 $script:HitScope = 'all'
+
+# Alt+W in the finder (T-017): the command wrapped to run in the directory it was recorded
+# in and come back, for the prompt, not run. The stored command is untouched; this is an
+# insert option (DESIGN principle 3). -ErrorAction Stop is the point: if the directory has
+# gone, the whole input stops there, rather than running the command wherever you are.
+# Nothing is stat'ed; a missing or unreachable path fails visibly when you press Enter.
+# One line when that is safe; a command with a newline or a # (which could comment out the
+# closing brace) goes on its own lines, unindented, so here-strings keep their columns.
+function Format-HitRunThere([string]$Command, [string]$Dir, [string]$Here) {
+    if (-not $Dir) { return $Command }
+    $a, $b = $Dir.TrimEnd('\', '/'), $Here.TrimEnd('\', '/')
+    $same = if ($IsWindows) { $a -ieq $b } else { $a -ceq $b }
+    if ($same) { return $Command }
+    $push = "Push-Location -LiteralPath '{0}' -ErrorAction Stop" -f $Dir.Replace("'", "''")
+    if ($Command.Contains("`n") -or $Command.Contains('#')) {
+        return "$push`ntry {`n$Command`n} finally { Pop-Location }"
+    }
+    "$push; try { $Command } finally { Pop-Location }"
+}
 
 # The terminal's clipboard sequence: ESC ] 52 ; c ; <base64 UTF-8> BEL.
 function Format-HitOsc52([string]$Text) {

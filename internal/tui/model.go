@@ -22,6 +22,7 @@ const (
 	ActionInsert Action = "insert" // put the command in the prompt, don't run it
 	ActionEdit   Action = "edit"   // put it in the prompt and keep the finder's text
 	ActionYank   Action = "yank"   // copy to the clipboard, leave the prompt untouched (T-014)
+	ActionThere  Action = "there"  // put it in the prompt wrapped to run where it ran (T-017)
 	ActionCancel Action = "cancel" // leave the prompt untouched
 )
 
@@ -30,6 +31,7 @@ type Choice struct {
 	Action  Action   `json:"action"`
 	Cmd     string   `json:"cmd,omitempty"`
 	ID      string   `json:"id,omitempty"`
+	Cwd     string   `json:"cwd,omitempty"`     // where it ran; set for ActionThere
 	Deleted []string `json:"deleted,omitempty"` // ids to tombstone
 }
 
@@ -190,6 +192,9 @@ func (m *Model) finish(a Action) {
 	if a != ActionCancel {
 		if r, ok := m.Selected(); ok {
 			c.Cmd, c.ID = r.Entry.Cmd, r.Entry.ID
+			if a == ActionThere {
+				c.Cwd = r.Entry.Cwd
+			}
 		} else {
 			c.Action = ActionCancel
 		}
@@ -227,6 +232,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "ctrl+y": // yank: the shell owns the clipboard, so hand it over and close (T-014)
 		m.finish(ActionYank)
+		return m, tea.Quit
+	case "alt+w": // where it ran: the shell wraps it in a round trip to that directory (T-017)
+		m.finish(ActionThere)
 		return m, tea.Quit
 	case "up":
 		m.cursor--
