@@ -22,6 +22,8 @@ type Rule struct {
 	commands map[string]bool // lower-cased first words
 	match    *regexp.Regexp
 	cwd      []*regexp.Regexp
+	scripts  []*regexp.Regexp // globs over the file the first word resolves to (C-040)
+	paths    Paths            // how to resolve it: ~ and the separator
 }
 
 // Set is every usable rule in file order, which is priority order.
@@ -122,8 +124,18 @@ func compile(cat config.Category, p Paths) (Rule, []string, bool) {
 		}
 		r.cwd = append(r.cwd, re)
 	}
-	if len(r.commands) == 0 && r.match == nil && len(r.cwd) == 0 && usable {
-		problems = append(problems, "has no commands, match or cwd, so it matches nothing")
+	for _, g := range cat.Scripts {
+		re, err := globRegexp(g, p)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("scripts %q: %v", g, err))
+			usable = false
+			continue
+		}
+		r.scripts = append(r.scripts, re)
+	}
+	r.paths = p
+	if len(r.commands) == 0 && r.match == nil && len(r.cwd) == 0 && len(r.scripts) == 0 && usable {
+		problems = append(problems, "has no commands, match, cwd or scripts, so it matches nothing")
 		usable = false
 	}
 	return r, problems, usable
@@ -136,6 +148,7 @@ const (
 	FieldCommands Field = "commands"
 	FieldMatch    Field = "match"
 	FieldCwd      Field = "cwd"
+	FieldScripts  Field = "scripts"
 )
 
 // Why is one rule's verdict on one command.
@@ -204,7 +217,85 @@ func (r *Rule) test(cmd, cwd, word string) (Why, bool) {
 			}
 		}
 	}
+	if len(r.scripts) > 0 {
+		if file, ok := resolveScript(word, cwd, r.paths); ok {
+			for _, re := range r.scripts {
+				if re.MatchString(file) {
+					return Why{Field: FieldScripts, What: file}, true
+				}
+			}
+		}
+	}
 	return Why{}, false
+}
+
+// resolveScript is the file a first word runs, when the word is a path: `scripts\x.ps1`,
+// `.\x.ps1` and `..\x.ps1` against the directory it ran in, `~\…` against home, and an
+// absolute path as it is. A bare word is not resolved, because pwsh looks those up on
+// PATH and finding out where would mean touching the disk. Pure string work: nothing is
+// stat'ed, so it is safe on the prompt path (C-040).
+func resolveScript(word, cwd string, p Paths) (string, bool) {
+	sep := "/"
+	if p.Windows {
+		sep = `\`
+		word = strings.ReplaceAll(word, "/", `\`)
+		cwd = strings.ReplaceAll(cwd, "/", `\`)
+	}
+	if word == "" || (!strings.Contains(word, sep) && word != "~") {
+		return "", false
+	}
+	var full string
+	switch {
+	case word == "~" || strings.HasPrefix(word, "~"+sep):
+		if p.Home == "" {
+			return "", false
+		}
+		full = strings.TrimRight(p.Home, `\/`) + word[1:]
+	case isAbs(word, p.Windows):
+		full = word
+	case p.Windows && strings.HasPrefix(word, `\`) && len(cwd) >= 2 && cwd[1] == ':':
+		full = cwd[:2] + word // \x.ps1 is the root of the current drive
+	default:
+		if cwd == "" {
+			return "", false
+		}
+		full = strings.TrimRight(cwd, sep) + sep + word
+	}
+	return cleanPath(full, sep), true
+}
+
+func isAbs(path string, windows bool) bool {
+	if !windows {
+		return strings.HasPrefix(path, "/")
+	}
+	return strings.HasPrefix(path, `\\`) || (len(path) >= 3 && path[1] == ':' && path[2] == '\\')
+}
+
+// cleanPath resolves `.` and `..` and repeated separators, keeping the root: a drive
+// (`C:`), a UNC share's leading `\\`, or `/`. `..` never climbs above the root.
+func cleanPath(path, sep string) string {
+	root := ""
+	switch {
+	case sep == `\` && strings.HasPrefix(path, `\\`):
+		root, path = `\\`, path[2:]
+	case sep == `\` && len(path) >= 2 && path[1] == ':':
+		root, path = path[:2]+`\`, path[2:]
+	case sep == "/" && strings.HasPrefix(path, "/"):
+		root = "/"
+	}
+	var parts []string
+	for _, part := range strings.Split(path, sep) {
+		switch part {
+		case "", ".":
+		case "..":
+			if len(parts) > 0 {
+				parts = parts[:len(parts)-1]
+			}
+		default:
+			parts = append(parts, part)
+		}
+	}
+	return root + strings.Join(parts, sep)
 }
 
 // firstWord is the command's first word as a shell would run it: after a call or

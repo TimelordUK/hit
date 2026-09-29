@@ -232,3 +232,82 @@ func TestNoConfigMeansNoCategories(t *testing.T) {
 		t.Errorf("got %q", why)
 	}
 }
+
+// scripts matches where the script file is, however it was typed (C-040). The owner's
+// case: anything in ~\dev\personal-docs\scripts is devops, run as scripts\X.ps1 from the
+// repo (where zoxide lands), .\X.ps1 from the folder itself, or by a full path from
+// anywhere — and nothing else run in that repo, and no other repo's scripts\.
+func TestScriptsMatchWhereTheFileIs(t *testing.T) {
+	cfg := config.Parse("c.toml", `
+[[category]]
+name    = "devops"
+scripts = '~\dev\personal-docs\scripts\*.ps1'
+`)
+	unixCfg := config.Parse("c.toml", `
+[[category]]
+name    = "devops"
+scripts = '~/dev/personal-docs/scripts/*.ps1'
+`)
+	for _, p := range []Paths{home, {Home: "/home/owner"}} {
+		s := Compile(cfg, p)
+		if !p.Windows {
+			s = Compile(unixCfg, p)
+		}
+		if len(s.Problems) > 0 {
+			t.Fatal(s.Problems)
+		}
+		repo, hit, elsewhere := `C:\Users\owner\dev\personal-docs`, `C:\Users\owner\dev\hit`, `C:\temp`
+		cases := []struct {
+			cmd, cwd string
+			want     bool
+		}{
+			{`scripts\Restart-Agent.ps1`, repo, true},
+			{`.\scripts\Restart-Agent.ps1 -Force`, repo, true},
+			{`& '.\scripts\Restart Agent.ps1'`, repo, true},
+			{`.\Restart-Agent.ps1`, repo + `\scripts`, true},
+			{`..\scripts\Restart-Agent.ps1`, repo + `\docs`, true},
+			{`~\dev\personal-docs\scripts\Restart-Agent.ps1`, elsewhere, true},
+			{`C:\Users\OWNER\dev\personal-docs\scripts\Restart-Agent.ps1`, elsewhere, true},
+			{`. .\scripts\Set-Env.ps1`, repo, true},
+			{`scripts\Restart-Agent.ps1 | Out-File x`, repo, true},
+			{`scripts\sub\Deep.ps1`, repo, false}, // * stays within one directory
+			{`scripts\notes.md`, repo, false},
+			{`Restart-Agent.ps1`, repo + `\scripts`, false}, // bare word: pwsh looks on PATH
+			{`git status`, repo, false},
+			{`Get-ChildItem`, repo + `\scripts`, false},
+			{`scripts\install.ps1`, hit, false},
+			{`scripts\Restart-Agent.ps1`, ``, false}, // relative, and no cwd to resolve it
+		}
+		if !p.Windows {
+			repo, hit = "/home/owner/dev/personal-docs", "/home/owner/dev/hit"
+			cases = []struct {
+				cmd, cwd string
+				want     bool
+			}{
+				{`scripts/Restart-Agent.ps1`, repo, true},
+				{`./Restart-Agent.ps1`, repo + `/scripts`, true},
+				{`~/dev/personal-docs/scripts/Restart-Agent.ps1`, "/tmp", true},
+				{`scripts/install.ps1`, hit, false},
+				{`scripts/Restart-Agent.ps1`, "/home/owner/dev/Personal-Docs", false}, // case matters
+			}
+		}
+		for _, tc := range cases {
+			if got := len(s.Classify(tc.cmd, tc.cwd)) > 0; got != tc.want {
+				t.Errorf("windows=%v %q in %q: got %v, want %v", p.Windows, tc.cmd, tc.cwd, got, tc.want)
+			}
+		}
+	}
+}
+
+// --explain names the file the command resolved to, so a near miss is visible.
+func TestExplainScripts(t *testing.T) {
+	s := Compile(config.Parse("c.toml", `
+[[category]]
+name    = "devops"
+scripts = ['~\dev\personal-docs\scripts\*.ps1']
+`), home)
+	m, _ := s.Explain(`scripts\Restart-Agent.ps1`, `C:\Users\owner\dev\personal-docs`)
+	if len(m) != 1 || m[0].Field != FieldScripts || m[0].What != `C:\Users\owner\dev\personal-docs\scripts\Restart-Agent.ps1` {
+		t.Errorf("got %+v", m)
+	}
+}

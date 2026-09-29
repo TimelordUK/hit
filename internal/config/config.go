@@ -38,6 +38,7 @@ type Category struct {
 	Commands []string
 	Match    string
 	Cwd      []string
+	Scripts  []string
 }
 
 // Capture is the [capture] table (DESIGN §18): the variables `hit init` compiles into the
@@ -155,16 +156,19 @@ func category(t map[string]any) (Category, []string) {
 			cat.Mark = str(k)
 		case "match":
 			cat.Match = str(k)
-		case "commands", "cwd":
+		case "commands", "cwd", "scripts":
 			list, err := stringList(t[k])
 			if err != nil {
 				problems = append(problems, k+": "+err.Error())
 				continue
 			}
-			if k == "commands" {
+			switch k {
+			case "commands":
 				cat.Commands = list
-			} else {
+			case "cwd":
 				cat.Cwd = list
+			default:
+				cat.Scripts = list
 			}
 		default:
 			problems = append(problems, "unknown field "+k)

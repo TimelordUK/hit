@@ -1,8 +1,5 @@
 # The owner's working set (DESIGN §17.1), as it would be written. Order is priority: the
-# first matching rule gives the row its mark. git and navigation come first so that a
-# `git status` inside personal-docs keeps git's mark rather than devops' (devops' cwd rule
-# takes everything run in that repo). devops still comes before content, so a curl to an
-# elastic host is devops rather than a download. Check any command with:
+# first matching rule gives the row its mark. Check any command with:
 #   hit categories --explain 'scripts\Restart-Agent.ps1' --cwd ~\dev\personal-docs
 
 [[category]]
@@ -15,16 +12,15 @@ name     = "navigation"
 commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
 color    = "green"
 
-# The personal-docs scripts, however they were run: `scripts\X.ps1` from inside the repo
-# (where zoxide lands you) is caught by cwd; a full or ~ path from anywhere else by match.
-# Any one field is enough, so cwd also takes everything else run in that repo (ls, git…):
-# the mark stays with the rules above, but Alt+G on devops lists them too.
+# Any script in personal-docs\scripts, however it was typed: `scripts\X.ps1` from the repo
+# (where zoxide lands you), `.\X.ps1` from the folder, or a full or ~ path from anywhere.
+# `scripts` matches where the file is (C-040), so ls or git run in that repo is not
+# devops, and neither is another repo's scripts\. `*` stays in one folder; use
+# 'scripts\**' to take subfolders too.
 [[category]]
 name     = "devops"
 color    = "yellow"
-commands = ["Invoke-Command", "Enter-PSSession", "Get-EsProcessTree"]
-match    = '(?i)elastic-(prod|uat)|personal-docs[\\/]scripts[\\/]'
-cwd      = ['~\dev\personal-docs\**', '~\dev\ops-scripts\**', '\\ops-share\**']
+scripts  = ['~\dev\personal-docs\scripts\*.ps1']
 
 [[category]]
 name     = "content"

@@ -154,3 +154,22 @@ x = 1
 		t.Errorf("got %v", c.Problems)
 	}
 }
+
+// scripts takes one or many, like cwd (C-040).
+func TestScriptsTakesOneOrMany(t *testing.T) {
+	c := Parse("c.toml", `
+[[category]]
+name    = "one"
+scripts = '~\dev\x\*.ps1'
+
+[[category]]
+name    = "many"
+scripts = ['~\dev\x\*.ps1', '~\dev\y\**']
+`)
+	if len(c.Problems) != 0 {
+		t.Fatal(c.Problems)
+	}
+	if !slices.Equal(c.Categories[0].Scripts, []string{`~\dev\x\*.ps1`}) || len(c.Categories[1].Scripts) != 2 {
+		t.Errorf("got %+v", c.Categories)
+	}
+}

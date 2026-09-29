@@ -807,6 +807,14 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 - **`cwd`** is one or more globs over the directory the command ran in. `~` expands to the
   home directory, `**` crosses any number of levels, and on Windows the comparison ignores
   case and treats `/` and `\` alike.
+- **`scripts`** is one or more globs, as `cwd`, over **the file the command runs** (C-040).
+  When the first word is a path it is resolved: `scripts\X.ps1`, `.\X.ps1` and `..\X.ps1`
+  against the directory the command ran in, `~\…` against home, an absolute path as it is;
+  `.` and `..` are folded. So `scripts = ['~\dev\personal-docs\scripts\*.ps1']` takes a
+  script however it was typed, and not `ls` in that repo nor another repo's `scripts\`,
+  which `cwd` and `match` could not tell apart. A bare word (`Restart-Agent.ps1`) is not
+  resolved: pwsh finds those on `PATH`, and knowing where would mean touching the disk. No
+  file is ever stat'ed, so it is as cheap as the other fields.
 - **Any one field is enough** within a rule. A command may fall in several categories: the
   filter matches any of them, and the first matching rule in file order decides the row's
   mark, so order is priority.
