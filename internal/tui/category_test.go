@@ -60,6 +60,12 @@ func TestAltGCyclesThroughTheCategoriesAndBack(t *testing.T) {
 	if got := len(m.Results()); got != 4 { // ls collapses to one row
 		t.Fatalf("unfiltered: %v", cmds(m))
 	}
+	// The first press opens the group picker and changes nothing yet; every press after
+	// that steps to the next group, so tapping Alt+G still cycles (T-019).
+	m = sendAlt(m, 'g')
+	if got := len(m.Results()); got != 4 || !m.picking {
+		t.Fatalf("first alt+g should only open the picker: picking=%v %v", m.picking, cmds(m))
+	}
 	m = sendAlt(m, 'g')
 	if got := strings.Join(cmds(m), ","); got != "gh pr list,git status" {
 		t.Errorf("git: %s", got)
@@ -93,7 +99,8 @@ func TestHeaderNamesTheCategoryFilter(t *testing.T) {
 	if v := view(m); !strings.Contains(v, "any group") {
 		t.Errorf("unfiltered header should say so:\n%s", v)
 	}
-	m = sendAlt(m, 'g')
+	m = sendAlt(sendAlt(m, 'g'), 'g')
+	m = send(m, "esc") // leave the picker, keep the group
 	if v := view(m); !strings.Contains(v, " git ") || strings.Contains(v, "any group") {
 		t.Errorf("filtered header should name git:\n%s", v)
 	}

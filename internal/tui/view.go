@@ -136,7 +136,11 @@ func (m Model) View() string {
 	if line := m.timingLine(); line != "" {
 		b.WriteString(s.dim.Render(truncate(line, m.width)) + "\n")
 	}
-	b.WriteString(s.dim.Render(m.statusLine()))
+	if m.picking {
+		b.WriteString(m.pickerLine(s))
+	} else {
+		b.WriteString(s.dim.Render(m.statusLine()))
+	}
 	out := b.String()
 	if m.renders == 0 {
 		m.logf("first render: %d bytes, %d results, %dx%d", len(out), len(m.results), m.width, m.height)
@@ -333,6 +337,29 @@ func (m Model) statusLine() string {
 		hints = hints[:len(hints)-1]
 	}
 	return truncate(pos, m.width)
+}
+
+// pickerLine replaces the status line while the group picker is open (T-019): each group
+// as its mark letter, in its colour as in the rows, then its name. Groups that do not fit
+// the width are dropped from the right, as hints are; Alt+G still steps to them.
+func (m Model) pickerLine(s styles) string {
+	line := s.dim.Render("group ")
+	tail := s.dim.Render("  alt+g next · esc done")
+	for i, r := range m.cats.Set.Rules {
+		name := s.dim.Render(r.Name)
+		if i == m.catFilter {
+			name = s.categoryMode(r.Color).Render(r.Name) // the one you are on
+		}
+		entry := s.markStyle(r.Color, false).Render(r.Mark) + " " + name
+		if i > 0 {
+			entry = s.dim.Render(" · ") + entry
+		}
+		if lipgloss.Width(line+entry+tail) > m.width {
+			break
+		}
+		line += entry
+	}
+	return line + tail
 }
 
 // rowLabel is the one-line form of a command for the list.

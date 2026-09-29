@@ -311,3 +311,23 @@ scripts = ['~\dev\personal-docs\scripts\*.ps1']
 		t.Errorf("got %+v", m)
 	}
 }
+
+// Alt+G's picker jumps by mark letter (T-019), so two groups sharing a letter leave the
+// second reachable only by cycling. Reported, so `mark = "…"` can fix it; both rules stay.
+func TestDuplicateMarksAreReported(t *testing.T) {
+	s := Compile(config.Parse("c.toml", `
+[[category]]
+name     = "devops"
+commands = ["x"]
+
+[[category]]
+name     = "docs"
+commands = ["y"]
+`), home)
+	if len(s.Rules) != 2 {
+		t.Fatalf("both rules should stay: %d", len(s.Rules))
+	}
+	if len(s.Problems) != 1 || !strings.Contains(s.Problems[0], `"D"`) || !strings.Contains(s.Problems[0], "devops") {
+		t.Errorf("got %v", s.Problems)
+	}
+}

@@ -210,7 +210,7 @@ routes cannot drift apart.
 | Ctrl+R (finder) | cycle scope, narrowing a step at a time: all → host → session → dir |
 | Alt+D | this directory only ⇄ the scope it was on before |
 | Alt+S | sort: rank ⇄ recent |
-| Alt+G | category filter: all → each category in config order → all (§17.1; only with categories configured) |
+| Alt+G | group picker (§17.1; only with categories configured): then a group's mark letter jumps to it (its own letter again: all groups), Alt+G again steps to the next, Esc closes the picker. Any other key closes it and works as usual |
 | type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |
@@ -841,8 +841,15 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
   paths.
 
 **In the finder** (T-012): a one-cell mark at the start of each categorised row, in the
-category's colour, and nothing at all on an uncategorised one. **Alt+G** cycles the
-category filter (all → each category in file order → all), and the header names it
+category's colour, and nothing at all on an uncategorised one. **Alt+G** opens a group
+picker (T-019): the status line lists each group as its mark letter and name, and the next
+key picks one — `d` for devops, the D already drawn beside its rows — so reaching a group
+is two keys however many there are, with no key bound per group. Its own letter again
+goes back to all groups; Alt+G again steps to the next, so tapping it still cycles (all →
+each in file order → all); Esc closes the picker, not the finder; any other key closes it
+and does its usual job, so typing straight after Alt+G is not lost. Two groups sharing a
+letter is reported by `hit categories` (the first wins the letter). It is a leader key
+scoped to one job, not the general one F-022 keeps in reserve. The header names the filter
 permanently, as it does scope and sort. An active category is its name in bold, in the
 category's own colour, on no background (T-018): the badge the other modes use, black on
 magenta, was unreadable in schemes where black is itself a dark purple, and the colour

@@ -53,6 +53,19 @@ func Compile(c config.Config, p Paths) *Set {
 			s.Rules = append(s.Rules, r)
 		}
 	}
+	// The finder's group picker jumps by mark letter (T-019): a second group with the same
+	// letter is reachable only by cycling, so say so. Both rules stay; it is cosmetic.
+	first := map[string]string{}
+	for _, r := range s.Rules {
+		k := strings.ToLower(r.Mark)
+		if owner, taken := first[k]; taken {
+			s.Problems = append(s.Problems, fmt.Sprintf(
+				"category %s: mark %q is also %s's, so Alt+G then %s picks %s; set mark = \"…\" to tell them apart",
+				r.Name, r.Mark, owner, r.Mark, owner))
+			continue
+		}
+		first[k] = r.Name
+	}
 	return s
 }
 

@@ -53,6 +53,9 @@ type Model struct {
 	// catFilter is the rule the list is narrowed to, or -1 for all of them.
 	cats      *category.Labeler
 	catFilter int
+	// picking is the group picker Alt+G opens (T-019): the next key is a group's mark
+	// letter, another Alt+G steps to the next group, Esc closes it.
+	picking bool
 
 	width, height int
 	Choice        *Choice // set when the finder is done
@@ -209,6 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.picking && m.pick(msg) {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		m.finish(ActionCancel)
@@ -250,15 +256,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query.Sort = nextSort(m.query.Sort)
 		m.cursor, m.top = 0, 0
 		m.refresh()
-	case "alt+g": // category filter: all → each category in config order → all (C-036)
-		if m.hasCategories() {
-			m.catFilter++
-			if m.catFilter >= len(m.cats.Set.Rules) {
-				m.catFilter = -1
-			}
-			m.cursor, m.top = 0, 0
-			m.refresh()
-		}
+	case "alt+g": // open the group picker (T-019); each further alt+g steps to the next
+		m.picking = m.hasCategories()
 	case "ctrl+x": // hide/show failed commands
 		m.query.HideFailed = !m.query.HideFailed
 		m.refresh()
@@ -311,6 +310,48 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// pick handles a key while the group picker is open, and reports whether it used it.
+//
+// Jumping to a group had to be possible without cycling past the others, and without a
+// key per group: the letters are the marks already drawn at the start of each row, so the
+// key for devops is the D you see beside its commands. Alt+G again still steps, so tapping
+// it cycles as before. Any key that is not a group's letter closes the picker and is then
+// handled as usual, so typing straight after Alt+G is not swallowed (T-019).
+func (m *Model) pick(msg tea.KeyMsg) bool {
+	switch msg.String() {
+	case "alt+g":
+		m.setGroup(m.catFilter + 1)
+		return true
+	case "esc":
+		m.picking = false
+		return true
+	}
+	m.picking = false
+	if msg.Type != tea.KeyRunes || msg.Alt || len(msg.Runes) != 1 {
+		return false
+	}
+	for i, r := range m.cats.Set.Rules {
+		if strings.EqualFold(r.Mark, string(msg.Runes[0])) {
+			if i == m.catFilter {
+				i = -1 // its own letter again: back to every group
+			}
+			m.setGroup(i)
+			return true
+		}
+	}
+	return false
+}
+
+// setGroup narrows to rule i, wrapping past the last to all (-1).
+func (m *Model) setGroup(i int) {
+	if i >= len(m.cats.Set.Rules) {
+		i = -1
+	}
+	m.catFilter = i
+	m.cursor, m.top = 0, 0
+	m.refresh()
 }
 
 // toggleDir narrows to the commands run in this directory, and puts back the scope it
