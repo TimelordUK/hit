@@ -1,12 +1,9 @@
-# The owner's working set (DESIGN §17.1), as it would be written. Order is priority:
-# devops first, so a curl to an elastic host is devops rather than content.
-
-[[category]]
-name     = "devops"
-color    = "yellow"
-commands = ["Invoke-Command", "Enter-PSSession", "Get-EsProcessTree"]
-match    = '(?i)elastic-(prod|uat)'
-cwd      = ['~\dev\ops-scripts\**', '\\ops-share\**']
+# The owner's working set (DESIGN §17.1), as it would be written. Order is priority: the
+# first matching rule gives the row its mark. git and navigation come first so that a
+# `git status` inside personal-docs keeps git's mark rather than devops' (devops' cwd rule
+# takes everything run in that repo). devops still comes before content, so a curl to an
+# elastic host is devops rather than a download. Check any command with:
+#   hit categories --explain 'scripts\Restart-Agent.ps1' --cwd ~\dev\personal-docs
 
 [[category]]
 name     = "git"
@@ -17,6 +14,17 @@ commands = ["git", "gh"]
 name     = "navigation"
 commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
 color    = "green"
+
+# The personal-docs scripts, however they were run: `scripts\X.ps1` from inside the repo
+# (where zoxide lands you) is caught by cwd; a full or ~ path from anywhere else by match.
+# Any one field is enough, so cwd also takes everything else run in that repo (ls, git…):
+# the mark stays with the rules above, but Alt+G on devops lists them too.
+[[category]]
+name     = "devops"
+color    = "yellow"
+commands = ["Invoke-Command", "Enter-PSSession", "Get-EsProcessTree"]
+match    = '(?i)elastic-(prod|uat)|personal-docs[\\/]scripts[\\/]'
+cwd      = ['~\dev\personal-docs\**', '~\dev\ops-scripts\**', '\\ops-share\**']
 
 [[category]]
 name     = "content"
