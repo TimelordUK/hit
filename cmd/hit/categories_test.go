@@ -173,3 +173,39 @@ func TestServerReloadsCategoriesWhenTheConfigChanges(t *testing.T) {
 		t.Errorf("edited config not picked up: %+v", got.Rules)
 	}
 }
+
+// Case is ignored unless config.toml asks for smart-case (C-041): 'Restart finds a
+// lower-case restart-lucid by default, and not once `[finder] case = "smart"` is set.
+func TestSearchCaseFollowsTheConfig(t *testing.T) {
+	env := isolated(t, "", "restart-lucid", "git status")
+	if out := runCmd(t, env, "search", "--print", "--query", "'Restart"); !strings.Contains(out, "restart-lucid") {
+		t.Errorf("default should ignore case:\n%s", out)
+	}
+	env = isolated(t, "[finder]\ncase = \"smart\"\n", "restart-lucid", "git status")
+	if out := runCmd(t, env, "search", "--print", "--query", "'Restart"); strings.Contains(out, "restart-lucid") {
+		t.Errorf("smart-case should demand the capital:\n%s", out)
+	}
+}
+
+// The resident server takes [finder] from the same reload as the categories, so editing
+// the case rule shows up at the next Ctrl+R too.
+func TestServerReloadsFinderSettings(t *testing.T) {
+	env := isolated(t, "")
+	s := &server{env: env}
+	s.categories()
+	if s.finderCfg.Case != "" {
+		t.Fatalf("default: %q", s.finderCfg.Case)
+	}
+	p, _ := paths.ConfigFile(env)
+	if err := os.WriteFile(p, []byte("[finder]\ncase = \"smart\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(p, later, later); err != nil {
+		t.Fatal(err)
+	}
+	s.categories()
+	if s.finderCfg.Case != "smart" {
+		t.Errorf("edited [finder] not picked up: %q", s.finderCfg.Case)
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -25,6 +26,7 @@ type Config struct {
 	Path       string
 	Categories []Category
 	Capture    Capture
+	Finder     Finder
 	// Problems are everything that was wrong, in file order. A category with a problem
 	// is not in Categories.
 	Problems []string
@@ -45,6 +47,12 @@ type Category struct {
 // shell script for its prompt hook to record.
 type Capture struct {
 	Env []string
+}
+
+// Finder is the [finder] table: how the finder behaves by default.
+type Finder struct {
+	// Case is "ignore" or "smart" (C-041), lower-cased; empty means the default, ignore.
+	Case string
 }
 
 // Load reads the config at path. A missing file is an empty config, not a problem: most
@@ -112,6 +120,26 @@ func parse(c Config, text string) Config {
 					c.Capture.Env = env
 				default:
 					c.Problems = append(c.Problems, "capture: unknown field "+k)
+				}
+			}
+		case "finder":
+			t, ok := raw[key].(map[string]any)
+			if !ok {
+				c.Problems = append(c.Problems, "finder: expected a [finder] table")
+				continue
+			}
+			for _, k := range sortedKeys(t) {
+				switch k {
+				case "case":
+					v, _ := t[k].(string)
+					switch v = strings.ToLower(v); v {
+					case "ignore", "smart":
+						c.Finder.Case = v
+					default:
+						c.Problems = append(c.Problems, fmt.Sprintf("finder: case %v: expected \"ignore\" or \"smart\"; ignoring case", t[k]))
+					}
+				default:
+					c.Problems = append(c.Problems, "finder: unknown field "+k)
 				}
 			}
 		default:

@@ -64,6 +64,7 @@ type Query struct {
 	Host       string    // this machine
 	Shell      string    // current shell family; empty means don't filter
 	HideFailed bool      // drop commands with a non-zero exit
+	Case       Case      // empty means CaseIgnore
 	Now        time.Time // for ranking and tests
 	Limit      int       // 0 means no limit
 	// Keep, when set, drops every run it returns false for, before duplicates collapse:
@@ -129,7 +130,7 @@ func Search(h *store.History, q Query) []Result {
 
 	results := make([]Result, 0, len(order))
 	for _, a := range order {
-		score, matched, ok := Match(a.res.Entry.Cmd, q.Text)
+		score, matched, ok := MatchCase(a.res.Entry.Cmd, q.Text, q.Case)
 		if !ok {
 			continue
 		}
@@ -227,8 +228,9 @@ func bonus(r Result) float64 {
 
 // Match scores pattern against text and returns the rune indexes that matched.
 //
-// Matching is a subsequence match, smart-case (an upper-case rune in the pattern makes
-// that match case-sensitive), scoring contiguous runs and matches at word boundaries
+// Matching is a subsequence match, smart-case here (an upper-case rune in the pattern
+// makes that match case-sensitive; Search ignores case unless the query asks, see
+// MatchCase), scoring contiguous runs and matches at word boundaries
 // higher. An empty pattern matches everything with a neutral score.
 //
 // A pattern opening with a single quote is matched literally instead: `'hit` wants the
@@ -238,19 +240,36 @@ func bonus(r Result) float64 {
 // exact-substring term (C-030). A quote anywhere else is an ordinary character, which
 // matters because commands are full of them.
 func Match(text, pattern string) (score float64, matched []int, ok bool) {
+	return MatchCase(text, pattern, CaseSmart)
+}
+
+// Case is how a query's letters match a command's (C-041).
+type Case string
+
+const (
+	// CaseIgnore matches regardless of case: 'Restart finds restart-lucid. The default,
+	// because a capital typed out of habit hiding the very command you want is worse than
+	// a few extra rows; exact case still ranks first (scoreMatched).
+	CaseIgnore Case = "ignore"
+	// CaseSmart is fzf's rule: an upper-case rune in the pattern must match exactly.
+	CaseSmart Case = "smart"
+)
+
+// MatchCase is Match with the case rule chosen; empty means CaseIgnore.
+func MatchCase(text, pattern string, c Case) (score float64, matched []int, ok bool) {
 	if pattern == "" {
 		return 1, nil, true
 	}
 	runes := []rune(text)
 	if lit, isLiteral := strings.CutPrefix(pattern, "'"); isLiteral {
-		return matchLiteral(runes, []rune(lit))
+		return matchLiteral(runes, []rune(lit), c)
 	}
 	pat := []rune(pattern)
 
 	matched = make([]int, 0, len(pat))
 	pi := 0
 	for i := 0; i < len(runes) && pi < len(pat); i++ {
-		if !runeMatch(runes[i], pat[pi]) {
+		if !runeMatch(runes[i], pat[pi], c) {
 			continue
 		}
 		matched = append(matched, i)
@@ -264,14 +283,14 @@ func Match(text, pattern string) (score float64, matched []int, ok bool) {
 
 // matchLiteral finds pat as a run of adjacent runes. The earliest occurrence wins, which
 // is also the best-scoring one: scoreMatched rewards a match that starts early.
-func matchLiteral(runes, pat []rune) (float64, []int, bool) {
+func matchLiteral(runes, pat []rune, c Case) (float64, []int, bool) {
 	if len(pat) == 0 {
 		return 1, nil, true // a lone quote: the term is still being typed
 	}
 	for start := 0; start+len(pat) <= len(runes); start++ {
 		hit := true
 		for j := range pat {
-			if !runeMatch(runes[start+j], pat[j]) {
+			if !runeMatch(runes[start+j], pat[j], c) {
 				hit = false
 				break
 			}
@@ -318,8 +337,8 @@ func scoreMatched(runes, pat []rune, matched []int) float64 {
 	return (total / (float64(len(pat)) * 3.5)) * (0.5 + density) * early
 }
 
-func runeMatch(text, pat rune) bool {
-	if unicode.IsUpper(pat) {
+func runeMatch(text, pat rune, c Case) bool {
+	if c == CaseSmart && unicode.IsUpper(pat) {
 		return text == pat // smart-case: an upper-case pattern rune must match exactly
 	}
 	return unicode.ToLower(text) == unicode.ToLower(pat)

@@ -76,7 +76,8 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		Host: *host, Shell: *shell, OkOnly: *okOnly, Limit: *limit,
 	}, at)
 
-	cats, _ := loadCategories(env)
+	cats, finder, _ := loadConfig(env)
+	q.Case = search.Case(finder.Case)
 	tl.Mark("config")
 	if *group != "" && cats.Index(*group) < 0 {
 		fmt.Fprintf(stderr, "hit: no category %q (hit categories lists them)\n", *group)

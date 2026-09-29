@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/TimelordUK/hit/internal/category"
+	"github.com/TimelordUK/hit/internal/config"
 	"github.com/TimelordUK/hit/internal/ipc"
 	"github.com/TimelordUK/hit/internal/paths"
+	"github.com/TimelordUK/hit/internal/search"
 	"github.com/TimelordUK/hit/internal/store"
 )
 
@@ -148,8 +150,9 @@ type server struct {
 	// The categories, kept between requests and reloaded when config.toml changes, so
 	// editing a rule shows up at the next Ctrl+R without restarting anything (DESIGN
 	// §17.1). Touched only by the request goroutine; requests are serial.
-	cats    *category.Set
-	catsMod time.Time
+	cats      *category.Set
+	finderCfg config.Finder // [finder], reloaded with the categories (C-041)
+	catsMod   time.Time
 
 	mu    sync.Mutex
 	timer *time.Timer
@@ -287,7 +290,7 @@ func (s *server) categories() *category.Set {
 		mod = fi.ModTime()
 	}
 	if s.cats == nil || !mod.Equal(s.catsMod) {
-		s.cats, _ = loadCategories(s.env)
+		s.cats, s.finderCfg, _ = loadConfig(s.env)
 		s.catsMod = mod
 		debugf(s.env, "serve: categories loaded (%d rules, %d problems)", len(s.cats.Rules), len(s.cats.Problems))
 	}
@@ -332,7 +335,9 @@ func (s *server) finder(r Request) Response {
 	// hasOut is true: the cold path passes it when the choice goes somewhere other than
 	// stdout, which makes the finder draw on stdout — the stream terminals handle best.
 	// Here the choice goes down the pipe, so the same applies.
-	choice, err := runFinder(h, q, s.categories(), "", true, log, tl)
+	cats := s.categories()
+	q.Case = search.Case(s.finderCfg.Case)
+	choice, err := runFinder(h, q, cats, "", true, log, tl)
 	if tl != nil {
 		timingf(s.env, "timing (go, served): %s", tl)
 	}

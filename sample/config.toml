@@ -33,6 +33,13 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 color    = "cyan"
 
 # ---------------------------------------------------------------------------------------
+# The finder (C-041). Case is ignored by default: 'Restart finds restart-lucid, and exact
+# case still ranks first. "smart" is fzf's rule instead: a capital must match exactly.
+#
+# [finder]
+# case = "smart"
+
+# ---------------------------------------------------------------------------------------
 # Captured environment (C-037, DESIGN §18) — PLACEHOLDER, refine at work.
 #
 # Which environment variables to remember alongside your commands, so history can later

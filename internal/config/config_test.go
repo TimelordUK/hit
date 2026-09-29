@@ -173,3 +173,21 @@ scripts = ['~\dev\x\*.ps1', '~\dev\y\**']
 		t.Errorf("got %+v", c.Categories)
 	}
 }
+
+// [finder] case: "ignore" (the default) or "smart" (C-041). Anything else is reported
+// and the default stands, so a typo cannot quietly change how the finder matches.
+func TestFinderCase(t *testing.T) {
+	if c := Parse("c.toml", ``); c.Finder.Case != "" || len(c.Problems) != 0 {
+		t.Errorf("no [finder]: %+v", c)
+	}
+	for _, v := range []string{"ignore", "smart", "SMART"} {
+		c := Parse("c.toml", "[finder]\ncase = \""+v+"\"\n")
+		if len(c.Problems) != 0 || c.Finder.Case != strings.ToLower(v) {
+			t.Errorf("%q: %+v", v, c)
+		}
+	}
+	c := Parse("c.toml", "[finder]\ncase = \"sensitive\"\ncolour = 1\n")
+	if c.Finder.Case != "" || len(c.Problems) != 2 {
+		t.Errorf("bad value and unknown field should both be reported: %+v", c)
+	}
+}

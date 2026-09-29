@@ -253,7 +253,14 @@ is the whole of the information.
 finder that has stopped working — which is exactly how the directory scope was first
 reported.
 
-**Matching modes.** A bare query is a smart-case subsequence. A query opening with a single
+**Case is ignored by default (C-041).** It used to be smart-case, fzf's rule: a capital in
+the query must match exactly. In daily use that hid the very command wanted: `'Restart`
+found nothing when the script was `restart-lucid.ps1`, and nothing on screen said why.
+Ignoring case costs a few extra rows at most, and exact case still ranks first, because the
+scorer gives a bonus for it. `[finder] case = "smart"` in `config.toml` puts fzf's rule
+back; the resident server picks the change up with the categories, at the next Ctrl+R.
+
+**Matching modes.** A bare query is a subsequence match. A query opening with a single
 quote is matched *literally* — `'hit` wants those three runes adjacent. Subsequence matching
 is loose by design, and on a real history that shows: `hit` also finds `Get-History`,
 `Get-ChildItem` and `Push-Location`, each carrying h, i and t in that order. The quote is
@@ -266,8 +273,8 @@ inferred from a character that is easy to miss.
 **Ranking** (`internal/search`, golden-tested): match quality × frequency (log, so a command
 run 500 times doesn't bury one run twice) × recency (halves every 7 days, with a floor) ×
 bonuses for this directory (1.5), this session (1.2) and a penalty for a failed exit (0.7).
-Matching is smart-case subsequence, scored on contiguity, word boundaries, span and how
-early it starts. Duplicates collapse into one result with a run count; the directory and
+Matching is a case-insensitive subsequence (smart-case by config), scored on contiguity,
+word boundaries, span and how early it starts. Duplicates collapse into one result with a run count; the directory and
 session bonuses look at every run of that command, not just the latest.
 
 - **Each row carries its time** in a fixed-width column on the left, dimmed so it reads as

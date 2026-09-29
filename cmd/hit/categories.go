@@ -26,11 +26,19 @@ import (
 // loadCategories reads and compiles config.toml. It cannot fail: a config that cannot be
 // read or compiled yields no rules and its problems, never an error on the Ctrl+R path.
 func loadCategories(env paths.Env) (*category.Set, string) {
+	cats, _, p := loadConfig(env)
+	return cats, p
+}
+
+// loadConfig is loadCategories plus the [finder] settings, read in the same pass so the
+// spawned finder and the resident one cannot disagree about either.
+func loadConfig(env paths.Env) (*category.Set, config.Finder, string) {
 	p, err := paths.ConfigFile(env)
 	if err != nil {
-		return &category.Set{Problems: []string{err.Error()}}, ""
+		return &category.Set{Problems: []string{err.Error()}}, config.Finder{}, ""
 	}
-	return category.Compile(config.Load(p), category.Paths{Home: env.Home, Windows: env.GOOS == "windows"}), p
+	c := config.Load(p)
+	return category.Compile(c, category.Paths{Home: env.Home, Windows: env.GOOS == "windows"}), c.Finder, p
 }
 
 func runCategories(args []string, env paths.Env, stdout, stderr io.Writer) int {
