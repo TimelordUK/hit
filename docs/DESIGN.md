@@ -843,7 +843,10 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 **In the finder** (T-012): a one-cell mark at the start of each categorised row, in the
 category's colour, and nothing at all on an uncategorised one. **Alt+G** cycles the
 category filter (all → each category in file order → all), and the header names it
-permanently, as it does scope and sort. `hit search --category git` does the same outside
+permanently, as it does scope and sort. An active category is its name in bold, in the
+category's own colour, on no background (T-018): the badge the other modes use, black on
+magenta, was unreadable in schemes where black is itself a dark purple, and the colour
+ties the header to the marks in the rows. `hit search --category git` does the same outside
 the finder. **Alt+Z** is set aside for the directory finder (T-011).
 
 **Tuning** is `hit categories`: each category with its count and most frequent commands,

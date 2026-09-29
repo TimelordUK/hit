@@ -204,3 +204,26 @@ func strip(s string) string {
 	}
 	return b.String()
 }
+
+// Alt+G's filter was drawn as a badge, black on magenta, and in schemes where black is a
+// dark purple it could hardly be read (owner, 2026-09-29). It is now the category's own
+// colour as bold text on no background: a yellow devops reads as a yellow "devops".
+func TestActiveCategoryIsItsOwnColourWithNoBackground(t *testing.T) {
+	s := newStyles()
+	if s.noColor {
+		t.Skip("NO_COLOR is set")
+	}
+	st := s.categoryMode("yellow")
+	if st.GetForeground() != ansiColor("yellow") {
+		t.Errorf("foreground = %v, want the category's yellow", st.GetForeground())
+	}
+	if _, none := st.GetBackground().(lipgloss.NoColor); !none {
+		t.Errorf("background = %v, want none", st.GetBackground())
+	}
+	if !st.GetBold() {
+		t.Error("should be bold, to stand out from the grey mode words")
+	}
+	if _, none := s.categoryMode("").GetForeground().(lipgloss.NoColor); !none {
+		t.Error("a category with no colour should use the terminal's own text colour")
+	}
+}

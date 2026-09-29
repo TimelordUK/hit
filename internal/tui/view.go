@@ -103,9 +103,14 @@ func (m Model) View() string {
 		// An active mode is a badge, not another word in a row of grey ones. Which mode
 		// the finder is in has to be readable at a glance, because the alternative is
 		// reading an empty list and concluding the finder is broken (T-008, T-009).
-		if md.active {
+		switch {
+		case md.category:
+			// The category filter is its own colour, not a badge: the badge's black on
+			// magenta was unreadable in schemes where black is itself a dark purple.
+			right += "  " + s.categoryMode(md.color).Render(md.text)
+		case md.active:
 			right += " " + s.badge.Render(" "+md.text+" ")
-		} else {
+		default:
 			right += "  " + s.scope.Render(md.text)
 		}
 	}
@@ -155,6 +160,17 @@ func (s styles) markStyle(color string, selected bool) lipgloss.Style {
 		return lipgloss.NewStyle().Bold(true).Background(c).Foreground(chipText(color))
 	}
 	return lipgloss.NewStyle().Foreground(c)
+}
+
+// categoryMode draws the active category filter in the header: its name, bold, in the
+// category's colour, on no background. A category with no colour keeps the terminal's
+// own text colour, which still stands out from the grey words around it.
+func (s styles) categoryMode(color string) lipgloss.Style {
+	st := lipgloss.NewStyle().Bold(true)
+	if s.noColor || color == "" {
+		return st
+	}
+	return st.Foreground(ansiColor(color))
 }
 
 // ansiColor maps a configured colour to a terminal one. Names are the 16 ANSI colours, so
@@ -210,6 +226,9 @@ func (m Model) timingLine() string {
 type mode struct {
 	text   string
 	active bool
+	// category marks the active category filter, drawn in color rather than as a badge.
+	category bool
+	color    string
 }
 
 // modes is what the header says about the current view, left to right.
@@ -241,7 +260,8 @@ func (m Model) modes() []mode {
 		// Named permanently once categories exist, like scope and sort; absent when none
 		// are configured, because then there is no key to teach.
 		if m.catFilter >= 0 {
-			out = append(out, mode{text: m.cats.Set.Rules[m.catFilter].Name, active: true})
+			r := m.cats.Set.Rules[m.catFilter]
+			out = append(out, mode{text: r.Name, active: true, category: true, color: r.Color})
 		} else {
 			out = append(out, mode{text: "any group"})
 		}
