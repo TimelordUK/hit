@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- hit: the finder in a terminal window, in the family style of sql-cli and mless.
+     A prompt with a query, then history rows: a group mark letter in its colour, the
+     command as a bar with its matched runes in yellow, one row selected. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="frame">
+      <rect x="8" y="8" width="240" height="240" rx="28" ry="28"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <!-- terminal background and title bar -->
+    <rect x="8" y="8" width="240" height="240" fill="#1a1f2b"/>
+    <rect x="8" y="8" width="240" height="40" fill="#252b38"/>
+    <circle cx="30" cy="28" r="6" fill="#ff5f56"/>
+    <circle cx="50" cy="28" r="6" fill="#ffbd2e"/>
+    <circle cx="70" cy="28" r="6" fill="#27c93f"/>
+
+    <!-- the prompt: hit ❯ rest▏ -->
+    <text x="20" y="84" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace"
+          font-size="26" font-weight="700" fill="#56b6c2">hit</text>
+    <text x="76" y="84" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace"
+          font-size="26" font-weight="700" fill="#c678dd">❯</text>
+    <text x="102" y="84" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace"
+          font-size="26" fill="#e5c07b">rest</text>
+    <rect x="171" y="63" width="4" height="27" fill="#56b6c2"/>
+
+    <rect x="8" y="100" width="240" height="2" fill="#0f1219"/>
+
+    <!-- rows: mark letter, command bar, matched runes in yellow -->
+    <g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="17" font-weight="700">
+      <text x="22" y="128" fill="#61afef">G</text>
+      <rect x="44" y="118" width="150" height="8" rx="3" fill="#3a4150"/>
+      <rect x="84" y="118" width="26" height="8" rx="2" fill="#e5c07b"/>
+
+      <text x="22" y="156" fill="#98c379">N</text>
+      <rect x="44" y="146" width="120" height="8" rx="3" fill="#3a4150"/>
+      <rect x="58" y="146" width="20" height="8" rx="2" fill="#e5c07b"/>
+
+      <!-- the selected row: a band across the window -->
+      <rect x="8" y="166" width="240" height="30" fill="#005f87"/>
+      <text x="22" y="187" fill="#e5c07b">D</text>
+      <rect x="44" y="177" width="176" height="9" rx="3" fill="#d7dae0"/>
+      <rect x="44" y="177" width="40" height="9" rx="2" fill="#ffd75f"/>
+
+      <text x="22" y="220" fill="#56b6c2">C</text>
+      <rect x="44" y="210" width="136" height="8" rx="3" fill="#3a4150"/>
+      <rect x="120" y="210" width="24" height="8" rx="2" fill="#e5c07b"/>
+    </g>
+  </g>
+</svg>

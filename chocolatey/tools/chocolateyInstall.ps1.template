@@ -1,0 +1,25 @@
+$ErrorActionPreference = 'Stop'
+
+# Downloads the Windows x64 zip from the matching GitHub release, checks its SHA256 and
+# unpacks hit.exe here; Chocolatey shims it onto PATH. The version and checksum below are
+# filled in from the release's SHA256SUMS.txt when the package is packed
+# (scripts/choco-pack.ps1, run by .github/workflows/chocolatey.yml).
+$toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$version  = '__VERSION__'
+
+$packageArgs = @{
+  packageName    = $env:ChocolateyPackageName
+  unzipLocation  = $toolsDir
+  url64bit       = "https://github.com/TimelordUK/hit/releases/download/v$version/hit_v${version}_windows_amd64.zip"
+  checksum64     = '__CHECKSUM64__'
+  checksumType64 = 'sha256'
+}
+
+Install-ChocolateyZipPackage @packageArgs
+
+Write-Host ''
+Write-Host 'hit is installed. To turn it on, add this line to your PowerShell profile ($PROFILE):'
+Write-Host ''
+Write-Host '    Invoke-Expression (& hit init pwsh | Out-String)'
+Write-Host ''
+Write-Host 'then open a new shell and press Ctrl+R. Shells already open keep the version they loaded.'

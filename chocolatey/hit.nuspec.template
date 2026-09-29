@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>hit</id>
+    <version>__VERSION__</version>
+    <packageSourceUrl>https://github.com/TimelordUK/hit/tree/main/chocolatey</packageSourceUrl>
+    <owners>TimelordUK</owners>
+    <title>hit (shell history finder)</title>
+    <authors>TimelordUK</authors>
+    <projectUrl>https://github.com/TimelordUK/hit</projectUrl>
+    <projectSourceUrl>https://github.com/TimelordUK/hit</projectSourceUrl>
+    <docsUrl>https://github.com/TimelordUK/hit/blob/main/README.md</docsUrl>
+    <bugTrackerUrl>https://github.com/TimelordUK/hit/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/TimelordUK/hit/blob/main/LICENSE</licenseUrl>
+    <iconUrl>https://raw.githubusercontent.com/TimelordUK/hit/main/assets/icon.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>Shell history for PowerShell: every command with where and when it ran, found again with Ctrl+R.</summary>
+    <description>
+hit records every command you run in PowerShell, with the directory it ran in, when, how long it took and whether it failed, and finds it again with a fuzzy finder on Ctrl+R.
+
+Highlights:
+* Ctrl+R opens the finder seeded with what you have typed; Enter puts the command back at the prompt, multi-line commands intact.
+* Scopes: everything, this machine, this session, or just this folder (Alt+D).
+* Sort by rank or by most recent (Alt+S); a leading ' matches literally.
+* Groups defined in config.toml (git, devops, …), marked in the list and picked with Alt+G then a letter.
+* Ctrl+Y copies a command to the clipboard; Del removes it from history.
+* Plain JSON Lines storage you own; nothing leaves your machine.
+
+Setup after install - add this line to your PowerShell profile ($PROFILE):
+
+    Invoke-Expression (&amp; hit init pwsh | Out-String)
+
+Then open a new shell and press Ctrl+R. The package does not edit your profile.
+    </description>
+    <releaseNotes>https://github.com/TimelordUK/hit/releases/tag/v__VERSION__</releaseNotes>
+    <copyright>Copyright (c) TimelordUK</copyright>
+    <tags>hit history shell powershell pwsh ctrl-r fuzzy finder cli terminal tui foss</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

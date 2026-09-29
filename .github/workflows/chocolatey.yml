@@ -1,0 +1,55 @@
+name: chocolatey
+
+# Packs hit for Chocolatey from an EXISTING GitHub release and, if asked, submits it.
+# Run by hand from the Actions tab; it is deliberately not part of the tag release:
+# moderation of a Chocolatey version can take weeks or months, and a submission waiting
+# in review must never hold up or fail a normal release. Send only the versions worth it.
+#
+# The package files come from main (chocolatey/), not from the tag, so a fix to the
+# packaging (a moderator's request, say) applies to whichever version is sent next.
+# Needs the CHOCOLATEY_API_KEY secret to push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to package (e.g. v0.1.17)'
+        required: true
+      push:
+        description: 'Submit to the Chocolatey community repository (off: pack only, as an artifact)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  chocolatey:
+    # choco is preinstalled on Windows runners.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Pack
+        id: pack
+        shell: pwsh
+        run: |
+          $nupkg = ./scripts/choco-pack.ps1 -Tag '${{ inputs.tag }}' -OutDir dist/choco | Select-Object -Last 1
+          "nupkg=$nupkg" >> $env:GITHUB_OUTPUT
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: hit-chocolatey-${{ inputs.tag }}
+          path: dist/choco/*.nupkg
+          if-no-files-found: error
+
+      - name: Push
+        if: ${{ inputs.push }}
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if (-not $env:CHOCOLATEY_API_KEY) { throw 'CHOCOLATEY_API_KEY is not set' }
+          choco push '${{ steps.pack.outputs.nupkg }}' --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY
+          if ($LASTEXITCODE) { throw "choco push failed ($LASTEXITCODE)" }
