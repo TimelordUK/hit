@@ -324,7 +324,7 @@ func (m Model) statusLine() string {
 	if len(m.results) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.cursor+1, len(m.results))
 	}
-	hints := []string{"↵ insert", "alt+d dir", "alt+s sort", "^r scope", "^x failed",
+	hints := []string{"↵ insert", "alt+d dir", "alt+s sort", "alt+r reset", "^r scope", "^x failed",
 		"^y yank", "alt+w run there", "tab edit", "del remove", "^z undo", "esc cancel"}
 	if m.hasCategories() {
 		hints = append(hints[:3], append([]string{"alt+g group"}, hints[3:]...)...)

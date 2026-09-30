@@ -264,6 +264,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query.Sort = nextSort(m.query.Sort)
 		m.cursor, m.top = 0, 0
 		m.refresh()
+	case "alt+r": // every mode back to how the finder opens; the typed text stays (T-020)
+		m.resetModes()
 	case "alt+g": // open the group picker (T-019); each further alt+g steps to the next
 		m.picking = m.hasCategories()
 	case "ctrl+x": // hide/show failed commands
@@ -350,6 +352,21 @@ func (m *Model) pick(msg tea.KeyMsg) bool {
 		}
 	}
 	return false
+}
+
+// resetModes puts back everything that narrows or reorders the list — scope, the folder
+// mode and what it would restore, sort, group, hide-failed, an open picker — as the finder
+// opens, so getting back to normal is one key rather than one per mode (T-020). The text
+// is kept: "this, but everywhere" is the usual reason to reset, and Ctrl+U clears it.
+func (m *Model) resetModes() {
+	m.query.Scope = search.ScopeAll
+	m.prevScope = ""
+	m.query.Sort = search.SortRank
+	m.query.HideFailed = false
+	m.catFilter = -1
+	m.picking = false
+	m.cursor, m.top = 0, 0
+	m.refresh()
 }
 
 // setGroup narrows to rule i, wrapping past the last to all (-1).

@@ -210,6 +210,7 @@ routes cannot drift apart.
 | Ctrl+R (finder) | cycle scope, narrowing a step at a time: all → host → session → dir |
 | Alt+D | this directory only ⇄ the scope it was on before |
 | Alt+S | sort: rank ⇄ recent |
+| Alt+R | reset: scope all, sort rank, every group, failed shown, picker closed — the finder as it opens, in one key instead of one per mode (T-020). The typed text stays ("this, but everywhere"); Ctrl+U clears it. A first step towards T-013's filter stack, which would pop one layer at a time |
 | Alt+G | group picker (§17.1; only with categories configured): then a group's mark letter jumps to it (its own letter again: all groups), Alt+G again steps to the next, Esc closes the picker. Any other key closes it and works as usual |
 | type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
 | ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
