@@ -12,7 +12,9 @@
     <docsUrl>https://github.com/TimelordUK/hit/blob/main/README.md</docsUrl>
     <bugTrackerUrl>https://github.com/TimelordUK/hit/issues</bugTrackerUrl>
     <licenseUrl>https://github.com/TimelordUK/hit/blob/main/LICENSE</licenseUrl>
-    <iconUrl>https://raw.githubusercontent.com/TimelordUK/hit/main/assets/icon.png</iconUrl>
+    <!-- jsDelivr pinned to a commit, as moderation asks: raw.githubusercontent.com is not
+         accepted. Re-pin only if assets/icon.png changes. -->
+    <iconUrl>https://cdn.jsdelivr.net/gh/TimelordUK/hit@875d984804938ff637f16bb771d98336b65752bd/assets/icon.png</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <summary>Shell history for PowerShell: every command with where and when it ran, found again with Ctrl+R.</summary>
     <description>
