@@ -95,12 +95,28 @@ git clone https://github.com/TimelordUK/hit.git; cd hit
 Both work in vi and Windows edit modes.
 
 **In the finder:** type to filter (fuzzy, in order; a capital letter makes that letter
-case-sensitive). `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` move. `Enter` puts the command in your
-prompt without running it, `Tab` the same for further editing, `Esc` cancels.
-`Ctrl+R` again cycles the scope: this directory → this session → this machine → everything.
-`Ctrl+X` hides commands that failed. `Del` deletes an entry, `Ctrl+Z` undoes that while the
-finder is open. Multi-line commands show a `⏎ +N` marker, with the whole command, its
+case-sensitive). Multi-line commands show a `⏎ +N` marker, with the whole command, its
 directory, exit code and duration in the preview.
+
+| Key | What it does |
+|---|---|
+| type / `Backspace` / `Ctrl+U` | filter, delete a character, clear the filter |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | move |
+| `Enter` | put the command in your prompt, without running it |
+| `Tab` | the same, for further editing |
+| `Alt+W` | put it in the prompt wrapped to run **where it ran**, then come back to where you are |
+| `Ctrl+Y` | copy the command to the clipboard and close; the prompt is untouched |
+| `Ctrl+R` | narrow the scope a step: everything → this machine → this session → this directory |
+| `Alt+D` | this directory only, and the same key back to where you were |
+| `Alt+S` | sort by rank ⇄ most recent first |
+| `Alt+G` | pick a [category](#categories): then its letter jumps to it, `Alt+G` again steps to the next |
+| `Ctrl+X` | hide or show commands that failed |
+| `Alt+R` | reset every mode above to how the finder opens; your typed text stays |
+| `Del` / `Ctrl+Z` | delete an entry / undo that, while the finder is open |
+| `Esc` / `Ctrl+C` | cancel, prompt untouched |
+
+Keys are fixed for now; a keymap in `config.toml` is planned (F-018). If a key does nothing,
+see [If something misbehaves](#if-something-misbehaves).
 
 **Alt+M** uses PowerShell's own parser and re-parses its own output: if the token stream
 isn't identical, you get your command back untouched. It won't merge separate statements or
@@ -138,8 +154,8 @@ cwd      = ['~\dev\ops-scripts\**']
 ```
 
 In Ctrl+R each categorised row carries its category's letter, in its colour, between the
-time and the command, and **Alt+G** cycles the list through the categories and back to all
-of them. `color` is an ANSI name (`blue`, `bright-yellow`, …) or `#rrggbb`; left out, the
+time and the command. **Alt+G** opens a group picker: press a category's letter to show only
+that category (its letter again for all of them), or tap Alt+G to step through them in turn. `color` is an ANSI name (`blue`, `bright-yellow`, …) or `#rrggbb`; left out, the
 letter is a quiet grey. `mark` overrides the letter. Edits to the config show up at the
 next Ctrl+R, with no restart.
 
@@ -169,6 +185,13 @@ Get-Content $env:TEMP\hit-debug.log
 
 The finder runs inside a key handler where errors are swallowed on purpose (a broken hit must
 never break your prompt), so that log is how it reports for duty.
+
+**A key does nothing?** With `HIT_DEBUG` set, every key the finder receives is logged as
+`tui: key "alt+r"`. (A resident finder reads `HIT_DEBUG` when it starts, so run
+`Get-Process hit | Stop-Process` first; the shell starts a fresh one by itself.) If the key
+never shows up in the log, something above hit is taking it. A known one: the **NVIDIA App
+overlay** holds **Alt+R** (and Alt+Z) as global hotkeys *even with the overlay turned off*.
+Rebind them in NVIDIA App → Settings → Features → Overlay → Keyboard shortcuts.
 
 ### If Ctrl+R feels slow
 

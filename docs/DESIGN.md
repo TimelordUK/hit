@@ -561,6 +561,10 @@ hit must feel the same everywhere and must not fight other tools for keys.
   - tmux: prefix Ctrl+B
   - Windows Terminal: Alt+Enter, Ctrl+Shift+*, Alt+Shift+*
   - PSReadLine (Windows mode): many Ctrl/Alt defaults, re-bound only for our two keys
+  - NVIDIA App overlay: Alt+R (performance overlay), Alt+Z (overlay), as global hotkeys
+    that stay registered with the overlay switched off. hit keeps Alt+R (T-020) because
+    the owner has rebound it; the README says how. Found 2026-09-30, when Alt+R never
+    reached the finder: the `HIT_DEBUG` key log showed Alt+G arriving and Alt+R not
 - **Keymap is data** (F-018): all keys come from `config.toml`, so a clash is a config
   change, not a code change.
 - **`hit doctor`** (F-019) detects the environment (`$ZELLIJ`, `$TMUX`, `$WT_SESSION`,
