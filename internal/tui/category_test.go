@@ -234,3 +234,93 @@ func TestActiveCategoryIsItsOwnColourWithNoBackground(t *testing.T) {
 		t.Error("a category with no colour should use the terminal's own text colour")
 	}
 }
+
+// The same complaint, a second time, about the modes the category fix did not cover:
+// sort, scope, literal and ok-only were still a badge, black on magenta, and on the
+// owner's work, laptop and home machines alike they read as two shades of purple
+// (owner, 2026-10-01). Backgrounds in the header are the recurring mistake — a scheme
+// only has to move its purples for black-on-colour to vanish — so this asserts the rule
+// rather than the one style: an active mode is a hue change on no background (T-021).
+func TestActiveModesHaveNoBackground(t *testing.T) {
+	s := newStyles()
+	if s.noColor {
+		t.Skip("NO_COLOR is set")
+	}
+	if _, none := s.modeOn.GetBackground().(lipgloss.NoColor); !none {
+		t.Errorf("background = %v, want none: a filled badge is what made this unreadable",
+			s.modeOn.GetBackground())
+	}
+	if !s.modeOn.GetBold() {
+		t.Error("an active mode should be bold, to carry the emphasis the background used to")
+	}
+	// A hue change, not a shade of the colour it sits next to: two purples was the bug.
+	if s.modeOn.GetForeground() == s.scope.GetForeground() {
+		t.Error("an active mode is the same colour as an inactive one, so the mode cannot be seen")
+	}
+}
+
+// Every mode the header can draw must come out readable, so this walks the real header
+// with each one switched on and checks none of them paints a background.
+func TestNoHeaderModeDrawsABackground(t *testing.T) {
+	if newStyles().noColor {
+		t.Skip("NO_COLOR is set")
+	}
+	// The profile is pinned, and put back afterwards. Left alone, lipgloss looks at the
+	// test binary's output, finds no terminal, and renders plain text — so this test would
+	// pass by seeing no escapes at all, which is worse than not having it.
+	was := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(was) })
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	for _, tc := range []struct {
+		name string
+		set  func(m *Model)
+	}{
+		{"sort recent", func(m *Model) { m.query.Sort = search.SortRecent }},
+		{"dir scope", func(m *Model) { m.query.Scope = search.ScopeDir }},
+		{"literal", func(m *Model) { m.query.Text = "'git" }},
+		{"ok-only", func(m *Model) { m.query.HideFailed = true }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(t)
+			m.width = 120
+			tc.set(&m)
+			m.refresh()
+			header := strings.SplitN(m.View(), "\n", 2)[0]
+			if bg := firstBackground(header); bg != "" {
+				t.Errorf("the header paints a background (%s), which is what made the modes "+
+					"unreadable:\n%s", bg, strings.ReplaceAll(header, "\x1b", "ESC"))
+			}
+		})
+	}
+}
+
+// firstBackground returns the first background-setting SGR parameter it finds in s, or ""
+// if there is none. Reverse video counts: it paints a background by swapping.
+func firstBackground(s string) string {
+	runes := []rune(s)
+	for i := 0; i < len(runes); {
+		if runes[i] != '\x1b' || i+1 >= len(runes) || runes[i+1] != '[' {
+			i++
+			continue
+		}
+		j := i + 2
+		for j < len(runes) && runes[j] != 'm' {
+			j++
+		}
+		if j >= len(runes) {
+			break
+		}
+		for _, f := range strings.Split(string(runes[i+2:j]), ";") {
+			switch {
+			case f == "7", f == "48":
+				return f
+			case len(f) == 2 && f[0] == '4' && f[1] >= '0' && f[1] <= '7':
+				return f
+			case len(f) == 3 && f[0] == '1' && f[1] == '0' && f[2] >= '0' && f[2] <= '7':
+				return f
+			}
+		}
+		i = j + 1
+	}
+	return ""
+}

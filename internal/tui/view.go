@@ -13,7 +13,7 @@ import (
 // Styles are resolved once. NO_COLOR (and a dumb terminal) fall back to plain text;
 // lipgloss itself degrades to 16 colours where that's all there is.
 type styles struct {
-	header, scope, badge, dim, sep, cursor lipgloss.Style
+	header, scope, modeOn, dim, sep, cursor lipgloss.Style
 
 	// row and selRow are the two sets a list row draws with. They exist as whole sets,
 	// rather than as one set plus a highlight wrapped round the finished line, because
@@ -44,7 +44,7 @@ func newStyles() styles {
 		rev := lipgloss.NewStyle().Reverse(true)
 		return styles{
 			noColor: true,
-			header:  bold, scope: plain, badge: bold, dim: plain, sep: plain, cursor: rev,
+			header:  bold, scope: plain, modeOn: bold, dim: plain, sep: plain, cursor: rev,
 			row:    rowStyles{text: plain, match: bold, meta: plain, marker: plain, dim: plain},
 			selRow: rowStyles{text: rev, match: rev.Bold(true), meta: rev, marker: rev, dim: rev},
 		}
@@ -57,7 +57,14 @@ func newStyles() styles {
 	return styles{
 		header: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
 		scope:  lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		badge:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("5")),
+		// An active mode is a brighter, bolder word in a different hue — not a filled
+		// badge. It used to be black on magenta, which is unreadable in any scheme where
+		// black is itself a dark purple: on the owner's work, laptop and home machines
+		// alike it came out as two shades of purple. T-018 had already reached that
+		// conclusion for the category filter; this is the same fix for the rest of the
+		// modes (T-021). Cyan against the surrounding magenta is a change of hue rather
+		// than of shade, so it survives a theme that moves the purples around.
+		modeOn: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
 		dim:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 		sep:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 		cursor: lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
@@ -100,16 +107,17 @@ func (m Model) View() string {
 	}
 	right := s.scope.Render(count)
 	for _, md := range m.modes() {
-		// An active mode is a badge, not another word in a row of grey ones. Which mode
-		// the finder is in has to be readable at a glance, because the alternative is
-		// reading an empty list and concluding the finder is broken (T-008, T-009).
+		// An active mode is brighter and bolder than the words around it, in a different
+		// hue — never a filled badge. Which mode the finder is in has to be readable at a
+		// glance, because the alternative is reading an empty list and concluding the
+		// finder is broken (T-008, T-009). A background defeats that on its own: black on
+		// magenta came out as two shades of purple on every machine the owner uses
+		// (T-021), and T-018 had already reached the same conclusion for the category.
 		switch {
 		case md.category:
-			// The category filter is its own colour, not a badge: the badge's black on
-			// magenta was unreadable in schemes where black is itself a dark purple.
 			right += "  " + s.categoryMode(md.color).Render(md.text)
 		case md.active:
-			right += " " + s.badge.Render(" "+md.text+" ")
+			right += "  " + s.modeOn.Render(md.text)
 		default:
 			right += "  " + s.scope.Render(md.text)
 		}

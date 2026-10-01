@@ -247,9 +247,17 @@ the other should be tuned into.
 it is switched on teaches nothing about the key that switches it off, and the question the
 header answers (*why am I not seeing what I expected?*) is asked precisely when you have
 forgotten which mode you are in. Scope and sort are shown permanently, and a non-default
-one is drawn as a badge rather than as another grey word. In the directory scope the header
-names the *folder*, because in a filter showing one directory's commands, which directory
-is the whole of the information.
+one stands out from the grey words around it. In the directory scope the header names the
+*folder*, because in a filter showing one directory's commands, which directory is the
+whole of the information.
+
+**Nothing in the header has a background.** An active mode is a change of *hue* — bold
+bright cyan against the magenta of the inactive words — and never a filled badge. The badge
+came first and was wrong twice: black on magenta, which in any scheme that makes its black
+a dark purple is two shades of the same colour and cannot be read. T-018 found this for the
+category filter and left the rest; T-021 found the rest, on three machines. A shade apart
+survives one theme and not the next, so the rule is a hue apart, and a test walks the real
+header with each mode switched on and fails on any background at all.
 
 **An empty list says why it is empty**, and which key widens it. Without that it reads as a
 finder that has stopped working — which is exactly how the directory scope was first
@@ -857,9 +865,9 @@ and does its usual job, so typing straight after Alt+G is not lost. Two groups s
 letter is reported by `hit categories` (the first wins the letter). It is a leader key
 scoped to one job, not the general one F-022 keeps in reserve. The header names the filter
 permanently, as it does scope and sort. An active category is its name in bold, in the
-category's own colour, on no background (T-018): the badge the other modes use, black on
-magenta, was unreadable in schemes where black is itself a dark purple, and the colour
-ties the header to the marks in the rows. `hit search --category git` does the same outside
+category's own colour, on no background (T-018), which ties the header to the marks in the
+rows. It was the first mode to lose its background and the rest followed for the same
+reason (T-021). `hit search --category git` does the same outside
 the finder. **Alt+Z** is set aside for the directory finder (T-011).
 
 **Tuning** is `hit categories`: each category with its count and most frequent commands,
