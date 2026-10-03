@@ -34,6 +34,8 @@ commands:
   serve       stay resident and draw the finder on request, so the cost of
               starting a process is paid once per shell rather than per
               recall. Not a service: it dies with the shell, or when idle
+  cd <terms>  where cd would jump (F-030); --explain lists every match and
+              why, --json answers as the shell reads it
   categories  what each category in config.toml catches, and what none do;
               --explain "<command>" says which rule matched and why
   status      list the resident servers: pid, parent shell, pipe, version,
@@ -61,6 +63,8 @@ func run(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return runSearch(args[1:], env, stdout, stderr)
 	case "serve":
 		return runServe(args[1:], env, stdout, stderr)
+	case "cd":
+		return runCd(args[1:], env, stdout, stderr)
 	case "categories":
 		return runCategories(args[1:], env, stdout, stderr)
 	case "status":
@@ -90,11 +94,17 @@ func runInit(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		exe = "hit"
 	}
 	// A config that is missing or broken captures nothing; `hit categories` reports why.
+	// A jump = true category binds cd (F-030); a dropped, broken one does not.
 	var capture []string
+	var jump bool
 	if conf, err := paths.ConfigFile(env); err == nil {
-		capture = config.Load(conf).Capture.Env
+		c := config.Load(conf)
+		capture = c.Capture.Env
+		for _, cat := range c.Categories {
+			jump = jump || cat.Jump
+		}
 	}
-	if err := shell.WritePwsh(stdout, hist, exe, version, capture); err != nil {
+	if err := shell.WritePwsh(stdout, hist, exe, version, capture, jump); err != nil {
 		fmt.Fprintln(stderr, "hit:", err)
 		return 1
 	}

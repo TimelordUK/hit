@@ -304,7 +304,8 @@ function Register-HitPrompt {
 function Enable-Hit {
     param(
         [Parameter(Mandatory)][string]$HistoryPath,
-        [string[]]$CaptureEnv = @()  # [capture] env from config.toml (C-037)
+        [string[]]$CaptureEnv = @(),  # [capture] env from config.toml (C-037)
+        [switch]$Jump                 # a category has jump = true: cd jumps (F-030)
     )
     if (-not (Get-Module PSReadLine)) { return }  # not an interactive console host
     $script:HitHistoryPath = $HistoryPath
@@ -316,6 +317,7 @@ function Enable-Hit {
     Register-HitHistoryHandler
     Register-HitPrompt
     Register-HitKeyHandlers
+    if ($Jump) { Register-HitCd }
     if ($env:HIT_SERVER) {
         Enable-HitServer -Idle ($env:HIT_SERVER_IDLE ? $env:HIT_SERVER_IDLE : '30m')
     }
@@ -338,6 +340,7 @@ function Disable-Hit {
     $script:HitPending = $null
     $script:HitServerMode = $false
     if ($script:HitKeysBound) { Remove-HitKeyHandlers }
+    Unregister-HitCd
 }
 
 # ---------------------------------------------------------------------------------------
@@ -995,5 +998,88 @@ function Invoke-HitToggleMultiline {
         if ($reason -and $script:HitEditor.Notify) { & $script:HitEditor.Notify "hit: left as it is, $reason" }
     } catch {
         Write-HitDebug ("toggle error: " + ($_ | Out-String))
+    }
+}
+
+# ---------------------------------------------------------------------------------------
+# cd (F-023, F-030, DESIGN §8.1). A real path goes straight to Set-Location and never
+# reaches hit; only a guess asks, through the resident server when there is one. Bound to
+# `cd` only when config.toml has a jump = true category, so without one cd is untouched.
+# ---------------------------------------------------------------------------------------
+
+$script:HitCdBound = $false
+
+# Spawns `hit cd --json` and returns its output; tests replace it.
+$script:HitCdRunner = {
+    param([string[]]$Arguments)
+    & $script:HitExe @Arguments
+}
+
+# Step 0: what Set-Location takes on sight (-, +, .., ~, a rooted, drive or provider path),
+# or a relative path that is there. The only stat, and it is when you press Enter on cd,
+# never when the prompt draws.
+function Test-HitRealPath([string]$Path) {
+    if ($Path -in '-', '+', '.', '..', '~') { return $true }
+    if ($Path -match '^(~|\.\.?)[\/]' -or $Path -match '^[\/]' -or $Path -match '^[A-Za-z][\w-]*:') { return $true }
+    try { Test-Path -Path $Path -PathType Container } catch { $false }
+}
+
+# Where hit would jump: the server's answer, or a spawned `hit cd --json`. $null when hit
+# could not say, which the caller treats as no jump.
+function Resolve-HitJump([string[]]$Terms, [string]$Here) {
+    if ($script:HitServerMode) {
+        $res = Invoke-HitServerRequest -Request @{ jump = $Terms; cwd = $Here }
+        if ($res -and -not $res.error) { return $res }
+        if ($res) { Write-HitDebug ("server jump error: " + $res.error) } else { Start-HitServer }
+    }
+    $text = & $script:HitCdRunner (@('cd', '--json', '--cwd', $Here, '--') + $Terms)
+    if ($text) { ConvertFrom-Json (@($text) -join "`n") }
+}
+
+# `cd <terms>`. Parameters, non-strings and no arguments are Set-Location's business and
+# pass straight through, as does anything hit cannot place: Set-Location then reports it.
+function Invoke-HitCd {
+    if ($args.Count -eq 0 -or @($args | Where-Object { $_ -isnot [string] -or $_ -match '^-\w' }).Count -gt 0) {
+        Set-Location @args
+        return
+    }
+    $terms = [string[]]$args
+    if ($terms.Count -eq 1 -and (Test-HitRealPath $terms[0])) {
+        Set-Location -Path $terms[0]
+        return
+    }
+    $res = $null
+    try {
+        $res = Resolve-HitJump $terms (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+    } catch {
+        Write-HitDebug ("jump error: " + ($_ | Out-String))
+    }
+    if (-not ($res -and $res.action -eq 'jump' -and $res.cwd)) {
+        Set-Location @args
+        return
+    }
+    try {
+        Set-Location -LiteralPath $res.cwd -ErrorAction Stop
+    } catch {
+        Write-Error -ErrorRecord $_
+        return
+    }
+    # A guess says why, so a rule that misfires can be seen (§8.1).
+    $why = if ($res.exact) { "$($res.step), exact" } else { $res.step }
+    Write-Host ("→ {0} ({1})" -f $res.cwd, $why) -ForegroundColor DarkGray
+}
+
+function Register-HitCd {
+    Set-Alias -Name cd -Value Invoke-HitCd -Option AllScope -Scope Global -Force
+    $script:HitCdBound = $true
+}
+
+# Puts cd back to Set-Location, unless something else has taken it since.
+function Unregister-HitCd {
+    if (-not $script:HitCdBound) { return }
+    $script:HitCdBound = $false
+    $a = Get-Alias -Name cd -Scope Global -ErrorAction SilentlyContinue
+    if ($a -and $a.Definition -eq 'Invoke-HitCd') {
+        Set-Alias -Name cd -Value Set-Location -Option AllScope -Scope Global -Force
     }
 }

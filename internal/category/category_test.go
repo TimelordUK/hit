@@ -331,3 +331,26 @@ commands = ["y"]
 		t.Errorf("got %v", s.Problems)
 	}
 }
+
+// Only a jump = true category's commands make jump targets, and a chain never does.
+func TestJumps(t *testing.T) {
+	s := ownerSet(t)
+	for cmd, want := range map[string]bool{
+		`cd ~\dev\trd-platform`:            true,
+		`Set-Location \devserv001\logs`:    true,
+		`git status`:                       false,
+		`cd ~\dev; git pull`:               false,
+		`.\scripts\Import-Credentials.ps1`: false,
+	} {
+		if got := s.Jumps(cmd, home.Home); got != want {
+			t.Errorf("Jumps(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+	if Compile(config.Parse("c.toml", "[[category]]\nname = \"git\"\ncommands = [\"git\"]\n"), home).HasJump() {
+		t.Error("a config without jump = true must not jump")
+	}
+	var none *Set
+	if none.HasJump() || none.Jumps("cd x", "") {
+		t.Error("no config, no jump")
+	}
+}

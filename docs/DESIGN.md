@@ -442,6 +442,19 @@ miss is reported, never pruned.
 `Set-Location` is never replaced and stays literal, and `Alt+C` opens the finder to pick by
 hand. No on/off key: those cover it without another piece of state.
 
+**How it is wired (2026-10-03).** `hit init pwsh` passes `-Jump` to `Enable-Hit` only
+when config.toml has a `jump = true` category, and that binds the `cd` alias to
+`Invoke-HitCd`; `Disable-Hit` gives it back to `Set-Location` unless something else has
+taken it since. Adding the flag needs a new shell, as `[capture]` does. `Invoke-HitCd`
+decides step 0 itself, in-process, so an ordinary `cd ..` never reaches hit. Parameters
+(`-LiteralPath`), non-string arguments and no arguments go straight to `Set-Location`. A
+guess asks the resident server (a `jump` request on the same pipe, drawing nothing) or,
+without one, spawns `hit cd --json`; both answer the same JSON. Anything hit cannot place,
+or a failure to ask, ends in plain `Set-Location` with its own error, so a broken hit never
+stops you moving. zoxide's `--cmd cd` binds the same alias, so whichever loads last owns
+`cd`. Not built yet: the timeout when the jump target is on a share (above), so a dead
+server still stalls `Set-Location` as it always has.
+
 ## 9. Safety guards (prod failsafes)
 
 Avoid sending the wrong thing to prod on a Monday morning.
@@ -903,7 +916,7 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 - **Directory visits are not categorised yet.** The finder shows commands; directory rows
   arrive with T-011, and `kind = "cd"` with them. Until then `navigation` means the
   commands you typed.
-- **`jump = true`** (F-030, not built) makes a category the source of `cd`'s jump
+- **`jump = true`** (F-030) makes a category the source of `cd`'s jump
   candidates: the directories its commands took you to (§8.1). Any category may carry it;
   none does unless the user says so, and without one `cd` is plain `Set-Location`.
 - **A broken config never breaks Ctrl+R.** A rule with an error is skipped and the error is

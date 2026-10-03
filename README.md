@@ -131,6 +131,7 @@ hit search --print --limit 20    # same ranking, JSON lines, no TUI (for scripts
 hit path history|data|config     # where things live
 hit status                       # resident finders: pid, parent, pipe, version
 hit categories                   # what each category catches, and what none do
+hit cd --explain logs            # where cd logs would jump from here, and why
 hit init pwsh                    # print the integration script
 hit version
 ```
@@ -170,6 +171,35 @@ hit categories --explain "git log | sls fix"  # which rule matched, and why
 ```
 
 Full rules: [DESIGN §17.1](docs/DESIGN.md).
+
+### cd that jumps (instead of zoxide)
+
+Opt in by adding `jump = true` to a category whose commands move you, then open a new
+terminal:
+
+```toml
+[[category]]
+name     = "navigation"
+commands = ["cd", "Set-Location"]
+jump     = true
+```
+
+`cd` then takes you anywhere you have been with one of those commands. A real path (`cd logs`
+where `logs` is here, `..`, `-`, `C:\x`, `\\server\share`) is plain `Set-Location` and never
+asks hit. Anything else is a guess:
+
+- **Near beats far.** Below where you are first, then one folder up at a time, then other
+  drives and shares. From inside a project, `cd logs` finds that project's `logs`, not a
+  busier one elsewhere.
+- **An exact folder name beats a partial one**; after that, most visited and most recent.
+- **Partial, never fuzzy**, and a server name counts: `cd devs logs` finds
+  `\\devserv001\logs`. The last word must match the last folder.
+
+A guess says where it went and why (`→ …\data\logs (nearest, exact)`). When it is wrong,
+`cd -` goes back, and `Set-Location` is never replaced. `hit cd --explain <words>` lists every
+match in order. With no `jump = true` category, or nothing visited yet, `cd` is untouched.
+If zoxide is set up with `--cmd cd`, drop the `--cmd cd`: whichever loads last owns `cd`.
+Full rules: [DESIGN §8.1](docs/DESIGN.md).
 
 ### Turning it off
 

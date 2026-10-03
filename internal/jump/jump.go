@@ -47,61 +47,74 @@ type Options struct {
 // Resolve picks the target for `cd <terms>` from cwd. ok is false when there is nothing to
 // jump to, and cd should be plain Set-Location.
 func Resolve(cands []Candidate, cwd string, terms []string, o Options) (r Result, ok bool) {
-	if len(terms) == 0 {
+	ms := Explain(cands, cwd, terms, o)
+	if len(ms) == 0 {
 		return Result{}, false
 	}
+	return ms[0].Result, true
+}
+
+// Match is one directory that matched, with the step that would take it.
+type Match struct {
+	Result
+	Score float64
+	// Up is how many parents above cwd the match's subtree starts: 0 for below, more
+	// for nearest; anywhere is further than any parent.
+	Up int
+}
+
+// Explain is every match, best first: what `hit cd --explain` shows. Step 0 short-cuts
+// everything, so a real path is the only match when there is one.
+func Explain(cands []Candidate, cwd string, terms []string, o Options) []Match {
+	if len(terms) == 0 {
+		return nil
+	}
 	if len(terms) == 1 && o.real(cwd, terms[0]) {
-		return Result{Dir: terms[0], Step: Real}, true
+		return []Match{{Result: Result{Dir: terms[0], Step: Real}}}
 	}
 	var split []string
 	for _, t := range terms {
 		split = append(split, o.segments(t)...)
 	}
 	if len(split) == 0 {
-		return Result{}, false
+		return nil
 	}
 
 	here := o.segments(cwd)
-	best, bestRing := -1, 0
-	var bestExact bool
-	for i, c := range cands {
+	var ms []Match
+	for _, c := range cands {
 		segs := o.segments(c.Dir)
 		exact, match := matches(segs, split)
 		if !match || equal(segs, here) {
 			continue
 		}
 		ring := distance(segs, here)
-		if best >= 0 && !better(ring, exact, c, bestRing, bestExact, cands[best]) {
-			continue
+		step := Nearest
+		switch {
+		case ring == 0:
+			step = Below
+		case ring > len(here):
+			step = Anywhere
 		}
-		best, bestRing, bestExact = i, ring, exact
+		ms = append(ms, Match{Result: Result{Dir: c.Dir, Step: step, Exact: exact}, Score: c.Score, Up: ring})
 	}
-	if best < 0 {
-		return Result{}, false
-	}
-	step := Nearest
-	switch {
-	case bestRing == 0:
-		step = Below
-	case bestRing > len(here):
-		step = Anywhere
-	}
-	return Result{Dir: cands[best].Dir, Step: step, Exact: bestExact}, true
+	sort.SliceStable(ms, func(i, j int) bool { return better(ms[i], ms[j]) })
+	return ms
 }
 
 // better orders matches: nearer, then exact, then frecency, then the path so ties are
 // stable from one run to the next.
-func better(ring int, exact bool, c Candidate, bRing int, bExact bool, b Candidate) bool {
-	if ring != bRing {
-		return ring < bRing
+func better(a, b Match) bool {
+	if a.Up != b.Up {
+		return a.Up < b.Up
 	}
-	if exact != bExact {
-		return exact
+	if a.Exact != b.Exact {
+		return a.Exact
 	}
-	if c.Score != b.Score {
-		return c.Score > b.Score
+	if a.Score != b.Score {
+		return a.Score > b.Score
 	}
-	return c.Dir < b.Dir
+	return a.Dir < b.Dir
 }
 
 // distance is how many parents up from cwd the candidate's subtree starts: 0 under cwd,

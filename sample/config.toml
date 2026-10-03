@@ -11,6 +11,9 @@ commands = ["git", "gh"]
 name     = "navigation"
 commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
 color    = "green"
+# cd jumps to where these commands have taken you (F-030): `cd logs` from anywhere. Only
+# their destinations count, so leave out any whose destination you do not want offered.
+jump     = true
 
 # Any script in personal-docs\scripts, however it was typed: `scripts\X.ps1` from the repo
 # (where zoxide lands you), `.\X.ps1` from the folder, or a full or ~ path from anywhere.

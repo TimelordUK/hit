@@ -191,3 +191,27 @@ func TestFinderCase(t *testing.T) {
 		t.Errorf("bad value and unknown field should both be reported: %+v", c)
 	}
 }
+
+// jump = true is opt-in (F-030); anything but a boolean is reported, not guessed at.
+func TestJump(t *testing.T) {
+	c := Parse("c.toml", `
+[[category]]
+name     = "navigation"
+commands = ["cd", "Set-Location"]
+jump     = true
+
+[[category]]
+name     = "git"
+commands = ["git"]
+
+[[category]]
+name = "broken"
+jump = "yes"
+`)
+	if len(c.Categories) != 2 || !c.Categories[0].Jump || c.Categories[1].Jump {
+		t.Errorf("got %+v", c.Categories)
+	}
+	if len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "jump: expected true or false") {
+		t.Errorf("problems: %q", c.Problems)
+	}
+}

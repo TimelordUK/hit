@@ -18,6 +18,7 @@ type Rule struct {
 	Name  string
 	Color string // as configured; empty means the finder's quiet default
 	Mark  string // one character, shown at the start of a row
+	Jump  bool   // its commands' destinations are cd's jump targets (F-030)
 
 	commands map[string]bool // lower-cased first words
 	match    *regexp.Regexp
@@ -81,7 +82,7 @@ var colors = map[string]bool{
 var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 func compile(cat config.Category, p Paths) (Rule, []string, bool) {
-	r := Rule{Name: cat.Name}
+	r := Rule{Name: cat.Name, Jump: cat.Jump}
 	var problems []string
 	usable := true
 
@@ -527,4 +528,31 @@ func (s *Set) Index(name string) int {
 		}
 	}
 	return -1
+}
+
+// Jumps reports whether any rule marked jump = true takes the command (F-030): the
+// directory it took you to is then a target for `cd <terms>`.
+func (s *Set) Jumps(cmd, cwd string) bool {
+	if !s.HasJump() {
+		return false
+	}
+	for _, i := range s.Classify(cmd, cwd) {
+		if s.Rules[i].Jump {
+			return true
+		}
+	}
+	return false
+}
+
+// HasJump reports whether any rule is marked jump = true. With none, cd never jumps.
+func (s *Set) HasJump() bool {
+	if s == nil {
+		return false
+	}
+	for _, r := range s.Rules {
+		if r.Jump {
+			return true
+		}
+	}
+	return false
 }

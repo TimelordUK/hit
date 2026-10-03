@@ -20,7 +20,7 @@ func psQuote(s string) string {
 // enabled with the history path the binary resolved and the variables config.toml asks to
 // capture (C-037), so the prompt hook never reads the config. `Remove-Module hit` unloads
 // it; `Disable-Hit` stops recording.
-func WritePwsh(w io.Writer, historyPath, exe, version string, captureEnv []string) error {
+func WritePwsh(w io.Writer, historyPath, exe, version string, captureEnv []string, jump bool) error {
 	enable := "Enable-Hit -HistoryPath " + psQuote(historyPath)
 	if len(captureEnv) > 0 {
 		quoted := make([]string, len(captureEnv))
@@ -29,6 +29,9 @@ func WritePwsh(w io.Writer, historyPath, exe, version string, captureEnv []strin
 		}
 		enable += " -CaptureEnv @(" + strings.Join(quoted, ", ") + ")"
 	}
+	if jump {
+		enable += " -Jump"
+	}
 	_, err := fmt.Fprintf(w, `# hit %s — PowerShell integration. Load with:
 #   Invoke-Expression (& hit init pwsh | Out-String)
 $null = New-Module -Name hit -ScriptBlock {
@@ -36,7 +39,7 @@ $script:HitExe = %s
 $script:HitVersion = %s
 %s
 %s
-Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer, Get-HitStatus
+Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer, Get-HitStatus, Invoke-HitCd
 } | Import-Module -Global
 `, version, psQuote(exe), psQuote(version), pwshScript, enable)
 	return err

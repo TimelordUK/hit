@@ -41,6 +41,9 @@ type Category struct {
 	Match    string
 	Cwd      []string
 	Scripts  []string
+	// Jump makes the directories this category's commands took you to the targets of
+	// `cd <terms>` (F-030, DESIGN §8.1). Off unless the user says so.
+	Jump bool
 }
 
 // Capture is the [capture] table (DESIGN §18): the variables `hit init` compiles into the
@@ -184,6 +187,12 @@ func category(t map[string]any) (Category, []string) {
 			cat.Mark = str(k)
 		case "match":
 			cat.Match = str(k)
+		case "jump":
+			b, ok := t[k].(bool)
+			if !ok {
+				problems = append(problems, k+": expected true or false")
+			}
+			cat.Jump = b
 		case "commands", "cwd", "scripts":
 			list, err := stringList(t[k])
 			if err != nil {

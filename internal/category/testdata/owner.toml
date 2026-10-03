@@ -16,6 +16,7 @@ commands = ["git", "gh"]
 [[category]]
 name     = "navigation"
 commands = ["cd", "sl", "chdir", "Set-Location", "Push-Location", "pushd", "Pop-Location", "popd"]
+jump     = true
 
 [[category]]
 name     = "content"

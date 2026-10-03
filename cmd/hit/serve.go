@@ -50,6 +50,8 @@ type Request struct {
 	// Ping asks only whether the server is alive, and draws nothing. The shell uses it
 	// to decide whether it can skip the cold spawn.
 	Ping bool `json:"ping,omitempty"`
+	// Jump asks where `cd <terms>` would go from Cwd (F-030), and draws nothing.
+	Jump []string `json:"jump,omitempty"`
 }
 
 // Response is the finder's answer. Its shape is the same JSON the cold path writes to
@@ -63,6 +65,10 @@ type Response struct {
 	Pong    bool     `json:"pong,omitempty"`
 	Error   string   `json:"error,omitempty"`
 	Version string   `json:"version,omitempty"`
+	// Step and Exact explain a jump (action "jump", target in Cwd), for the shell to say
+	// why it went where it did.
+	Step  string `json:"step,omitempty"`
+	Exact bool   `json:"exact,omitempty"`
 	// Server describes the process answering, and rides only on a ping reply, so
 	// `hit status` can say what is resident without a second kind of request (C-034).
 	Server *ServerInfo `json:"server,omitempty"`
@@ -136,7 +142,12 @@ func runServe(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		s.parent = w
 		go s.watchParent(w)
 	}
-	s.run(func(r Request) Response { return s.finder(r) })
+	s.run(func(r Request) Response {
+		if len(r.Jump) > 0 {
+			return s.jump(r)
+		}
+		return s.finder(r)
+	})
 	debugf(env, "serve: exiting (%s)", s.why)
 	return 0
 }
@@ -352,6 +363,17 @@ func (s *server) finder(r Request) Response {
 		}
 	}
 	return responseFor(choice)
+}
+
+// jump answers `cd <terms>` without drawing. The history is read fresh, as for the
+// finder: the directory you just went to is a target from the next cd.
+func (s *server) jump(r Request) Response {
+	a, err := resolveJump(s.env, s.categories(), r.Jump, r.Cwd)
+	if err != nil {
+		return Response{Error: err.Error()}
+	}
+	debugf(s.env, "serve: jump %q from %q: %d matches of %d", r.Jump, r.Cwd, len(a.matches), a.candidates)
+	return a.response()
 }
 
 // responseFor is the finder's choice as the server sends it: the same JSON the cold path
