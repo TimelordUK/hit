@@ -380,10 +380,67 @@ every `cmd` carries its `cwd`, so directory frecency comes for free.
 
 **UX:**
 
-- `Alt+C` → directory finder (fuzzy over path segments, frecency ranked); Enter = `Set-Location`.
-- `hit cd <terms>` / short alias (e.g. `j elastic logs`) → best match, no UI.
+- `Alt+C` → the finder on navigation rows only (T-011; `Alt+Z` switches to them from inside
+  the finder), substring over path segments, ranked as §8.1; Enter = `Set-Location`.
+- `cd <terms>` replaces `zoxide --cmd cd` (F-023): a real path goes straight to
+  `Set-Location`, anything else is a jump resolved as §8.1, no UI. `hit cd <terms>` is the
+  same resolution for scripts and `--explain`.
 - Pivot: from a directory in the finder, show *commands run there*, and from a command, jump to
   the directory it was run in. What you typed and where you typed it are the same dataset.
+
+### 8.1 How a jump picks its target (F-030, agreed 2026-10-03)
+
+The owner's daily complaint with zoxide, beyond shares: from inside a project, `cd logs`
+lands in some other tree's `logs` because it was visited more often. **Local beats
+distant.** A jump is only a convenience if it lands where you meant without looking.
+
+**Opt-in.** A category with `jump = true` (§17.1) turns the jump on; nothing is
+predefined and no category name is special. With no such category, or none of its rows yet,
+`cd` is exactly `Set-Location`. The owner's work config is `navigation` with `cd` and
+`Set-Location` and nothing else.
+
+**Candidates** are the directories the jump category's commands *took you to*: the `cd`
+record the prompt writes after such a command, which is the resolved path, so it is exact
+and nothing is stat'ed. Not the typed text (`cd logs` means nothing without its cwd), and not
+directories reached any other way (a script's `Set-Location`, `Pop-Location`): only places
+you chose to go.
+
+**Steps.** Each is a small named rule, tried in order; the first that finds anything wins.
+
+| # | Step | Rule |
+|---|---|---|
+| 0 | real path | `.\logs` exists, `..`, `-`, an absolute path → plain `Set-Location`, visited or not. The only stat, made when the command runs, never when the prompt draws |
+| 1 | below | a visited directory under the current one |
+| 2 | nearest | widen one parent at a time; the first parent whose visited subtree has a match wins |
+| 3 | anywhere | every visited directory: zoxide's behaviour, kept as the last resort |
+
+Step 2 is what keeps you inside the project without defining "project": no `.git` probe, no
+list of roots, just tree distance from where you stand. No unvisited directory is ever
+guessed, except the one that exists right here (step 0).
+
+**Within a step**, an exact last segment beats a substring (C-035) and frecency only breaks
+ties, so a near substring still beats a distant exact name. **Matching is substring, never
+fuzzy**: per path segment, ignoring case on Windows; fuzzy matching on directories makes
+too many odd matches. A UNC host is a segment, so `cd devs` can take `\\devserv001`. With
+several terms each matches a segment in order and the last must match the last segment.
+
+**The jump target on a share** is checked at jump time with a short timeout (above); a
+miss is reported, never pruned.
+
+**Tuning is the point**, since the right rules are found by use:
+
+- The rules are tested as a table, (visits, cwd, query) → target, over a **smoke tree** of
+  real folders in `testdata/` so step 0 runs against a real disk. Every bad jump from daily
+  use becomes a row before the fix (§13.3). Seed rows: `gdt-platform` beside
+  `gdt-platform-launch`, and `logs` in the current repo against `\\devserv001\logs`.
+- A guessed jump says why: `→ \\devserv001\logs (nearest, exact)`. A real path says nothing.
+- `hit cd --explain <terms>` lists each step's candidates and which step won, as
+  `hit categories --explain` does for categories.
+- The step order moves to config only if the table shows reordering is wanted.
+
+**When it guesses wrong:** `cd -` goes back (F-031 grows this into back and forward),
+`Set-Location` is never replaced and stays literal, and `Alt+C` opens the finder to pick by
+hand. No on/off key: those cover it without another piece of state.
 
 ## 9. Safety guards (prod failsafes)
 
@@ -756,7 +813,7 @@ into Ctrl+R — `jq` pipelines, one-off chains — gets no category. The owner's
 | Category | What | Why it exists |
 |---|---|---|
 | `git` | simple commands starting `git` or `gh` | daily, and easy to scope to |
-| `navigation` | typed `cd`, `Set-Location`, `Push-Location`, … and the `cd` records the prompt writes | the bucket the directory finder / `z` replacement looks at (T-011) |
+| `navigation` | typed `cd`, `Set-Location`, `Push-Location`, … and the `cd` records the prompt writes | the bucket the directory finder and `cd` jump look at, through `jump = true` (T-011, F-030) |
 | `content` | fetching from the web, expanding or making archives | mutative, and the syntax is always forgotten |
 | `environment` | setting `$env:` variables, `Get-Credential` into a variable, and the like | the variable a script needs is exactly what gets forgotten |
 | `devops` | bespoke scripts, remoting, elastic operations (curl or script alike) | placeholder: grows heuristically, one rule at a time |
@@ -846,6 +903,9 @@ match    = '(?i)^\$env:\w+\s*=|=\s*Get-Credential\b|SetEnvironmentVariable'
 - **Directory visits are not categorised yet.** The finder shows commands; directory rows
   arrive with T-011, and `kind = "cd"` with them. Until then `navigation` means the
   commands you typed.
+- **`jump = true`** (F-030, not built) makes a category the source of `cd`'s jump
+  candidates: the directories its commands took you to (§8.1). Any category may carry it;
+  none does unless the user says so, and without one `cd` is plain `Set-Location`.
 - **A broken config never breaks Ctrl+R.** A rule with an error is skipped and the error is
   reported (by `hit categories`, and in the finder's header); a missing file means no
   categories. Unknown fields are errors, so a typo like `comands` is caught, not ignored.
