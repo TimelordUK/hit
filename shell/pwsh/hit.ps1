@@ -428,7 +428,7 @@ function Format-HitTimeline($Timeline) {
     }
     $total = [System.Diagnostics.Stopwatch]::GetElapsedTime($Timeline.Start, $prev).TotalMilliseconds
     $parts.Add(('total {0:F0}' -f $total))
-    ($parts -join ' · ') + ' ms'
+    ($parts -join " $([char]0x00B7) ") + ' ms'  # a middle dot; non-ASCII is garbled by init
 }
 
 # Runs the binary and waits. Replaced in tests by one that writes a canned choice.
@@ -1066,7 +1066,8 @@ function Invoke-HitCd {
     }
     # A guess says why, so a rule that misfires can be seen (§8.1).
     $why = if ($res.exact) { "$($res.step), exact" } else { $res.step }
-    Write-Host ("→ {0} ({1})" -f $res.cwd, $why) -ForegroundColor DarkGray
+    # The arrow as [char]: the script reaches pwsh through the console's encoding (shell_test.go).
+    Write-Host ("{0} {1} ({2})" -f [char]0x2192, $res.cwd, $why) -ForegroundColor DarkGray
 }
 
 function Register-HitCd {
