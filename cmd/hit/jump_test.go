@@ -67,6 +67,19 @@ func TestCdJSONIsWhatTheServerSends(t *testing.T) {
 	}
 }
 
+// A few letters of a server's name reach it, and the answer says so (2026-10-04).
+func TestCdByServerName(t *testing.T) {
+	env := jumpHistory(t, jumpConfig, `\\d-k7q2x9.adp1.corp.pte\logs`)
+	want := Response{Action: "jump", Cwd: `\\d-k7q2x9.adp1.corp.pte\logs`, Step: "anywhere", ByServer: true}
+	if got := (&server{env: env}).jump(Request{Jump: []string{"adp1"}, Cwd: `C:\Users\owner`}); !reflect.DeepEqual(got, want) {
+		t.Errorf("served: %+v, want %+v", got, want)
+	}
+	out := runCmd(t, env, "cd", "--explain", "--cwd", `C:\Users\owner`, "adp1")
+	if !strings.Contains(out, `anywhere server`) {
+		t.Errorf("explain should name the server match:\n%s", out)
+	}
+}
+
 // Opt-in: without jump = true there is no jump, however much history there is.
 func TestCdWithoutAJumpCategory(t *testing.T) {
 	env := jumpHistory(t, "[[category]]\nname = \"navigation\"\ncommands = [\"cd\"]\n", `C:\Users\owner\dev\trd-platform`)

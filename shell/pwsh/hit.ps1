@@ -1020,7 +1020,7 @@ $script:HitCdRunner = {
 # never when the prompt draws.
 function Test-HitRealPath([string]$Path) {
     if ($Path -in '-', '+', '.', '..', '~') { return $true }
-    if ($Path -match '^(~|\.\.?)[\/]' -or $Path -match '^[\/]' -or $Path -match '^[A-Za-z][\w-]*:') { return $true }
+    if ($Path -match '^(~|\.\.?)[\\/]' -or $Path -match '^[\\/]' -or $Path -match '^[A-Za-z][\w-]*:') { return $true }
     try { Test-Path -Path $Path -PathType Container } catch { $false }
 }
 
@@ -1044,28 +1044,28 @@ function Invoke-HitCd {
         return
     }
     $terms = [string[]]$args
-    if ($terms.Count -eq 1 -and (Test-HitRealPath $terms[0])) {
-        Set-Location -Path $terms[0]
-        return
-    }
     $res = $null
-    try {
-        $res = Resolve-HitJump $terms (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
-    } catch {
-        Write-HitDebug ("jump error: " + ($_ | Out-String))
+    $to = if ($terms.Count -eq 1 -and (Test-HitRealPath $terms[0])) { @{ Path = $terms[0] } }
+    if (-not $to) {
+        try {
+            $res = Resolve-HitJump $terms (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+        } catch {
+            Write-HitDebug ("jump error: " + ($_ | Out-String))
+        }
+        $to = if ($res -and $res.action -eq 'jump' -and $res.cwd) { @{ LiteralPath = $res.cwd } } else { $res = $null }
     }
-    if (-not ($res -and $res.action -eq 'jump' -and $res.cwd)) {
-        Set-Location @args
+    # One Set-Location for every route. Its error is written again from here, so it is
+    # reported at the cd you typed rather than at this line inside the module (F-033).
+    try {
+        if ($to) { Set-Location @to -ErrorAction Stop } else { Set-Location @args -ErrorAction Stop }
+    } catch {
+        Write-Error -Exception $_.Exception -Category $_.CategoryInfo.Category -ErrorId $_.FullyQualifiedErrorId `
+            -TargetObject $_.TargetObject -CategoryActivity 'Set-Location'
         return
     }
-    try {
-        Set-Location -LiteralPath $res.cwd -ErrorAction Stop
-    } catch {
-        Write-Error -ErrorRecord $_
-        return
-    }
+    if (-not $res) { return }
     # A guess says why, so a rule that misfires can be seen (§8.1).
-    $why = if ($res.exact) { "$($res.step), exact" } else { $res.step }
+    $why = if ($res.exact) { "$($res.step), exact" } elseif ($res.byServer) { "$($res.step), server" } else { $res.step }
     # The arrow as [char]: the script reaches pwsh through the console's encoding (shell_test.go).
     Write-Host ("{0} {1} ({2})" -f [char]0x2192, $res.cwd, $why) -ForegroundColor DarkGray
 }

@@ -421,8 +421,18 @@ guessed, except the one that exists right here (step 0).
 **Within a step**, an exact last segment beats a substring (C-035) and frecency only breaks
 ties, so a near substring still beats a distant exact name. **Matching is substring, never
 fuzzy**: per path segment, ignoring case on Windows; fuzzy matching on directories makes
-too many odd matches. A UNC host is a segment, so `cd devs` can take `\\devserv001`. With
-several terms each matches a segment in order and the last must match the last segment.
+too many odd matches. With several terms each matches a segment in order and the last must
+match the last segment, so `cd devs logs` takes `\\devserv001\logs`.
+
+**A server by its name (2026-10-04).** One term may also match part of a share's server
+name, and then every place visited on that server matches: `cd adp1` takes
+`\\d-k7q2x9.adp1.corp.pte\logs`. Work servers have long generated names, a few letters of
+which are what you remember, and the server is never the last segment, so the last-segment
+rule alone could not reach one (owner, at work: `cd adp1` found nothing). Within a step a
+folder's name beats a server's, so `cd symbol` prefers `\\symbolserver\symbols` to a busier
+`\\symbolserver\cache`, and a server never outranks anything nearer. Several terms keep the
+ordinary rule: `cd devs logs` already names the folder. A guess made this way says so:
+`(anywhere, server)`.
 
 **The jump target on a share** is checked at jump time with a short timeout (above); a
 miss is reported, never pruned.

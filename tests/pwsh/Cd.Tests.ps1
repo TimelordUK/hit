@@ -71,8 +71,31 @@ Describe 'Invoke-HitCd' {
         $err = Invoke-HitCd nowhere-at-all 2>&1
         $script:Cd.Calls | Should -Be 1
         $err | Should -BeOfType System.Management.Automation.ErrorRecord
-        $err.InvocationInfo.MyCommand.Name | Should -Be 'Set-Location'
+        $err.CategoryInfo.Activity | Should -Be 'Set-Location'  # what the error view labels it with
         (Get-Location).ProviderPath | Should -Be (Join-Path $root 'trd-platform')
+    }
+
+    # F-033: the error is reported where you typed cd, not at a line inside hit's module
+    # (`Line 1063 | Set-Location @args`, owner 2026-10-04).
+    It 'reports the fallback error at the cd you typed' {
+        Use-FakeCd @{ action = 'none' }
+        $err = Invoke-HitCd nowhere-at-all 2>&1
+        $err.Exception.Message | Should -BeLike "Cannot find path*nowhere-at-all*"
+        $err.CategoryInfo.Category | Should -Be 'ObjectNotFound'
+        $err.InvocationInfo.Line | Should -BeLike '*Invoke-HitCd nowhere-at-all*'
+    }
+
+    It 'reports a real path that fails at the cd you typed too' {
+        Use-FakeCd $null
+        $err = Invoke-HitCd .\not-here 2>&1
+        $err.Exception.Message | Should -BeLike "Cannot find path*not-here*"
+        $err.InvocationInfo.Line | Should -BeLike '*Invoke-HitCd .\not-here*'
+    }
+
+    It 'names a match on the server name' {
+        Use-FakeCd @{ action = 'jump'; cwd = (Join-Path $root 'trd-platform' 'data'); step = 'anywhere'; byServer = $true }
+        $said = Invoke-HitCd adp1 6>&1
+        "$said" | Should -Be "$([char]0x2192) $(Join-Path $root 'trd-platform' 'data') (anywhere, server)"
     }
 
     It 'falls back to Set-Location when hit says nothing at all' {
@@ -95,6 +118,23 @@ Describe 'Invoke-HitCd' {
         $script:Cd.Calls | Should -Be 1
         $said | Should -BeNullOrEmpty
         (Get-Location).ProviderPath | Should -Be (Join-Path $root 'trd-platform')
+    }
+}
+
+Describe 'Test-HitRealPath' {
+    # On sight, never by looking: none of these exist, and a share may not even answer.
+    # A stripped backslash once made `[\\/]` mean `/` only, and `.\x` and `\\srv\share`
+    # passed only when Test-Path happened to find them (2026-10-04).
+    It 'takes <Path> on sight' -ForEach @(
+        @{ Path = '.\not-here' }, @{ Path = '..\not-here' }, @{ Path = '~\not-here' }
+        @{ Path = './not-here' }, @{ Path = '\\no-such-server\share' }, @{ Path = '\not-here' }
+        @{ Path = 'Z:\not-here' }, @{ Path = 'HKLM:\SOFTWARE' }
+    ) {
+        Test-HitRealPath $Path | Should -BeTrue
+    }
+
+    It 'leaves a bare word that is not here to hit' {
+        Test-HitRealPath 'not-here-either' | Should -BeFalse
     }
 }
 

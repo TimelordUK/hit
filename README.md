@@ -192,8 +192,10 @@ asks hit. Anything else is a guess:
   drives and shares. From inside a project, `cd logs` finds that project's `logs`, not a
   busier one elsewhere.
 - **An exact folder name beats a partial one**; after that, most visited and most recent.
-- **Partial, never fuzzy**, and a server name counts: `cd devs logs` finds
-  `\\devserv001\logs`. The last word must match the last folder.
+- **Partial, never fuzzy.** The last word must match the last folder: `cd devs logs` finds
+  `\\devserv001\logs`.
+- **A few letters of a server's name reach it**: `cd adp1` takes you to the place you use
+  most on `\\d-k7q2x9.adp1.corp.pte`. A folder name still beats a server name.
 
 A guess says where it went and why (`→ …\data\logs (nearest, exact)`). When it is wrong,
 `cd -` goes back, and `Set-Location` is never replaced. `hit cd --explain <words>` lists every

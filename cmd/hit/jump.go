@@ -62,7 +62,7 @@ func (a jumpAnswer) response() Response {
 		return Response{Action: "none"}
 	}
 	m := a.matches[0]
-	return Response{Action: "jump", Cwd: m.Dir, Step: string(m.Step), Exact: m.Exact}
+	return Response{Action: "jump", Cwd: m.Dir, Step: string(m.Step), Exact: m.Exact, ByServer: m.Server}
 }
 
 func isDir(dir string) bool {
@@ -128,7 +128,7 @@ func writeJumpExplain(w io.Writer, a jumpAnswer, terms []string, cwd string, top
 		fmt.Fprintf(w, "  a real path: Set-Location %s, nothing searched\n", a.matches[0].Dir)
 		return
 	}
-	fmt.Fprintf(w, "  %d of %d places match: below, then the fewest folders up, then anywhere; exact last folder first, then frecency\n\n",
+	fmt.Fprintf(w, "  %d of %d places match: below, then the fewest folders up, then anywhere; a folder name before a server name, exact before partial, then frecency\n\n",
 		len(a.matches), a.candidates)
 	for i, m := range a.matches {
 		if i == top {
@@ -139,13 +139,16 @@ func writeJumpExplain(w io.Writer, a jumpAnswer, terms []string, cwd string, top
 		if m.Step == jump.Nearest {
 			step = fmt.Sprintf("%d up", m.Up)
 		}
-		if m.Exact {
+		switch {
+		case m.Exact:
 			exact = "exact"
+		case m.Server:
+			exact = "server"
 		}
 		if i == 0 {
 			mark = "  <- jumps here"
 		}
-		fmt.Fprintf(w, "  %-8s %-5s %7.2f  %s%s\n", step, exact, m.Score, m.Dir, mark)
+		fmt.Fprintf(w, "  %-8s %-6s %7.2f  %s%s\n", step, exact, m.Score, m.Dir, mark)
 	}
 }
 

@@ -67,8 +67,9 @@ type Response struct {
 	Version string   `json:"version,omitempty"`
 	// Step and Exact explain a jump (action "jump", target in Cwd), for the shell to say
 	// why it went where it did.
-	Step  string `json:"step,omitempty"`
-	Exact bool   `json:"exact,omitempty"`
+	Step     string `json:"step,omitempty"`
+	Exact    bool   `json:"exact,omitempty"`
+	ByServer bool   `json:"byServer,omitempty"` // matched by a share's server name
 	// Server describes the process answering, and rides only on a ping reply, so
 	// `hit status` can say what is resident without a second kind of request (C-034).
 	Server *ServerInfo `json:"server,omitempty"`

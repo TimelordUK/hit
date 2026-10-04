@@ -59,6 +59,8 @@ var world = []Candidate{
 	{Dir: `\\devserv001\logs`, Score: 50},
 	{Dir: `\\devserv002\logs`, Score: 5},
 	{Dir: `\\symbolserver\symbols`, Score: 3},
+	{Dir: `\\symbolserver\cache`, Score: 90},
+	{Dir: `\\d-k7q2x9.adp1.corp.pte\logs`, Score: 2}, // a work server's generated name
 	{Dir: `D:\data\logs`, Score: 12},
 }
 
@@ -66,13 +68,14 @@ var world = []Candidate{
 // here before the rules change.
 func TestResolve(t *testing.T) {
 	cases := []struct {
-		name  string
-		cwd   string
-		query string
-		world []Candidate // nil: the owner's world
-		want  string      // "" when there is no jump and cd is plain Set-Location
-		step  Step
-		exact bool
+		name   string
+		cwd    string
+		query  string
+		world  []Candidate // nil: the owner's world
+		want   string      // "" when there is no jump and cd is plain Set-Location
+		step   Step
+		exact  bool
+		server bool // matched by the server's name (2026-10-04)
 	}{
 		// C-035: zoxide's daily failure.
 		{name: "exact name beats frecency", cwd: `~`, query: `trd-platform`,
@@ -107,6 +110,21 @@ func TestResolve(t *testing.T) {
 			want: `\\devserv002\logs`, step: Anywhere, exact: true},
 		{name: "anywhere only when nothing is nearer", cwd: `~\dev\personal-docs`, query: `symbols`,
 			want: `\\symbolserver\symbols`, step: Anywhere, exact: true},
+
+		// A few letters of a server's name reach the places on it. Owner, 2026-10-04, at
+		// work: `cd \\d-…adp1…\logs`, then `cd adp1` found nothing, because one word had to
+		// match the last folder and a server name is never last.
+		{name: "a server by a few letters of its name", cwd: `~\dev\trd-platform`, query: `adp1`,
+			want: `\\d-k7q2x9.adp1.corp.pte\logs`, step: Anywhere, server: true},
+		{name: "several places on matching servers: frecency", cwd: `~\dev\trd-platform`, query: `devs`,
+			want: `\\devserv001\logs`, step: Anywhere, server: true},
+		{name: "standing on one server, the other one", cwd: `\\devserv001\logs`, query: `devs`,
+			want: `\\devserv002\logs`, step: Anywhere, server: true},
+		{name: "the last folder beats the server name", cwd: `~\dev\personal-docs`, query: `symbol`,
+			want: `\\symbolserver\symbols`, step: Anywhere},
+		{name: "a server name never beats a nearer folder", cwd: `~\dev\trd-platform\source\core`, query: `dev`,
+			want: `~\dev`, step: Nearest, exact: true, world: []Candidate{
+				{Dir: `~\dev`, Score: 1}, {Dir: `\\devserv001\logs`, Score: 50}}},
 
 		// Terms.
 		{name: "a separator in a term splits it", cwd: `~`, query: `source\core`,
@@ -156,7 +174,7 @@ func TestResolve(t *testing.T) {
 			if !ok {
 				t.Fatalf("cd %s from %s: no jump, want %s", tc.query, tc.cwd, want)
 			}
-			if got.Dir != want || got.Step != tc.step || got.Exact != tc.exact {
+			if got.Dir != want || got.Step != tc.step || got.Exact != tc.exact || got.Server != tc.server {
 				t.Errorf("cd %s from %s:\n got  %s (%s, exact=%v)\n want %s (%s, exact=%v)",
 					tc.query, tc.cwd, got.Dir, got.Step, got.Exact, want, tc.step, tc.exact)
 			}

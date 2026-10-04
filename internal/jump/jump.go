@@ -34,6 +34,9 @@ type Result struct {
 	Dir   string
 	Step  Step
 	Exact bool // the last term is the whole last segment (C-035)
+	// Server: the term matched a share's server name, not a folder, so this is the best
+	// place visited on that server.
+	Server bool
 }
 
 // Options are what path handling depends on.
@@ -85,7 +88,8 @@ func Explain(cands []Candidate, cwd string, terms []string, o Options) []Match {
 	for _, c := range cands {
 		segs := o.segments(c.Dir)
 		exact, match := matches(segs, split)
-		if !match || equal(segs, here) {
+		server := !match && o.onServer(c.Dir, segs, split)
+		if !(match || server) || equal(segs, here) {
 			continue
 		}
 		ring := distance(segs, here)
@@ -96,17 +100,20 @@ func Explain(cands []Candidate, cwd string, terms []string, o Options) []Match {
 		case ring > len(here):
 			step = Anywhere
 		}
-		ms = append(ms, Match{Result: Result{Dir: c.Dir, Step: step, Exact: exact}, Score: c.Score, Up: ring})
+		ms = append(ms, Match{Result: Result{Dir: c.Dir, Step: step, Exact: exact, Server: server}, Score: c.Score, Up: ring})
 	}
 	sort.SliceStable(ms, func(i, j int) bool { return better(ms[i], ms[j]) })
 	return ms
 }
 
-// better orders matches: nearer, then exact, then frecency, then the path so ties are
-// stable from one run to the next.
+// better orders matches: nearer, then a folder's name over a server's, then exact, then
+// frecency, then the path so ties are stable from one run to the next.
 func better(a, b Match) bool {
 	if a.Up != b.Up {
 		return a.Up < b.Up
+	}
+	if a.Server != b.Server {
+		return !a.Server
 	}
 	if a.Exact != b.Exact {
 		return a.Exact
@@ -152,6 +159,21 @@ func matches(segs, terms []string) (exact, ok bool) {
 		j++
 	}
 	return last == lt, true
+}
+
+// onServer: a single term that is part of a share's server name matches every place
+// visited on that server (2026-10-04). Work servers have long generated names
+// (`\\d-k7q2x9.adp1.corp.pte\logs`), a few letters of which are what you remember, and
+// the server is never the last folder, so the last-folder rule alone could not reach it.
+// Several terms keep the ordinary rule: `cd devs logs` already says which folder.
+func (o Options) onServer(dir string, segs, terms []string) bool {
+	if !o.Windows || len(terms) != 1 || len(segs) < 2 {
+		return false
+	}
+	if !strings.HasPrefix(dir, `\\`) && !strings.HasPrefix(dir, "//") {
+		return false
+	}
+	return strings.Contains(segs[0], terms[0])
 }
 
 func equal(a, b []string) bool {
