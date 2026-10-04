@@ -100,7 +100,9 @@ func (m Model) View() string {
 	var b strings.Builder
 	// The search line: a prompt, what you've typed, a cursor, and how many commands match,
 	// so it is obvious that typing filters.
-	left := s.header.Render("hit ❯ ") + m.query.Text + s.cursor.Render("▏")
+	text := []rune(m.query.Text)
+	caret := min(max(m.caret, 0), len(text))
+	left := s.header.Render("hit ❯ ") + string(text[:caret]) + s.cursor.Render("▏") + string(text[caret:])
 	count := fmt.Sprintf("%d match", len(m.results))
 	if len(m.results) != 1 {
 		count += "es"

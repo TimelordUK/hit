@@ -212,8 +212,9 @@ routes cannot drift apart.
 | Alt+S | sort: rank ⇄ recent |
 | Alt+R | reset: scope all, sort rank, every group, failed shown, picker closed — the finder as it opens, in one key instead of one per mode (T-020). The typed text stays ("this, but everywhere"); Ctrl+U clears it. A first step towards T-013's filter stack, which would pop one layer at a time |
 | Alt+G | group picker (§17.1; only with categories configured): then a group's mark letter jumps to it (its own letter again: all groups), Alt+G again steps to the next, Esc closes the picker. Any other key closes it and works as usual |
-| type / Backspace / Ctrl+U | filter, delete a character, clear the filter |
-| ↑ / ↓ / PgUp / PgDn / Home / End | move (Ctrl+P/N are **not** bound: Zellij owns them) |
+| type / Backspace / Ctrl+U | filter at the caret, delete the character before it, delete everything before it (the whole text with the caret at the end) |
+| ← / → / Ctrl+← / Ctrl+→ / Ctrl+A / Ctrl+E | move the caret: a character, a word (a run of non-spaces), the start or end of the text (T-022). Home/End stay the list's; Delete stays row deletion, so there is no forward delete |
+| ↑ / ↓ / PgUp / PgDn / Home / End | move through the list (Ctrl+P/N are **not** bound: Zellij owns them) |
 | Enter | put the command in the prompt, don't run it |
 | Tab | put it in the prompt (`edit`) |
 | Alt+W | put it in the prompt wrapped to run **where it ran** and come back: `Push-Location -LiteralPath '<dir>' -ErrorAction Stop; try { … } finally { Pop-Location }` (T-017). The finder hands back the command and its recorded directory (`"action":"there","cwd":…`) and the shell builds the wrapper in its own syntax; the stored command is untouched. `-ErrorAction Stop` means a directory that has gone stops the whole input instead of running the command where you are; nothing is stat'ed. A command with a newline or `#` gets the wrapper on separate lines, the command unindented so here-strings survive. Recorded here, or no directory known: the plain command |

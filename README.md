@@ -100,8 +100,9 @@ directory, exit code and duration in the preview.
 
 | Key | What it does |
 |---|---|
-| type / `Backspace` / `Ctrl+U` | filter, delete a character, clear the filter |
-| `↑` `↓` `PgUp` `PgDn` `Home` `End` | move |
+| type / `Backspace` / `Ctrl+U` | filter at the caret, delete the character before it, delete everything before it |
+| `←` `→` / `Ctrl+←` `Ctrl+→` / `Ctrl+A` `Ctrl+E` | move the caret in the text: one character (left/right arrow), one word (Ctrl + left/right arrow), to the start or end |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | move through the list |
 | `Enter` | put the command in your prompt, without running it |
 | `Tab` | the same, for further editing |
 | `Alt+W` | put it in the prompt wrapped to run **where it ran**, then come back to where you are |

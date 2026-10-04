@@ -39,6 +39,7 @@ type Choice struct {
 type Model struct {
 	history *store.History
 	query   search.Query
+	caret   int // where typing goes in query.Text, in characters (T-022)
 	results []search.Result
 	cursor  int
 	top     int // first visible row
@@ -93,6 +94,7 @@ func New(h *store.History, q search.Query) Model {
 		q.Sort = search.SortRank
 	}
 	m := Model{history: h, query: q, deleted: map[string]bool{}, width: 80, height: 24, catFilter: -1}
+	m.caret = len([]rune(q.Text))
 	m.refresh()
 	return m
 }
@@ -139,6 +141,9 @@ func (m Model) Query() search.Query { return m.query }
 
 // Results returns the current, visible results.
 func (m Model) Results() []search.Result { return m.results }
+
+// Caret returns where typing goes in the filter text, in characters.
+func (m Model) Caret() int { return m.caret }
 
 // Cursor returns the selected row.
 func (m Model) Cursor() int { return m.cursor }
@@ -283,20 +288,29 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.order = m.order[:n-1]
 			m.refresh()
 		}
+	// The filter text is edited at the caret (T-022). Home and End were already the list's
+	// top and bottom, so the text's ends are readline's Ctrl+A and Ctrl+E; Delete already
+	// removes a row, so there is no forward delete.
+	case "left":
+		m.caret = max(m.caret-1, 0)
+	case "right":
+		m.caret = min(m.caret+1, len([]rune(m.query.Text)))
+	case "ctrl+left":
+		m.caret = wordLeft([]rune(m.query.Text), m.caret)
+	case "ctrl+right":
+		m.caret = wordRight([]rune(m.query.Text), m.caret)
+	case "ctrl+a":
+		m.caret = 0
+	case "ctrl+e":
+		m.caret = len([]rune(m.query.Text))
 	case "backspace":
-		if r := []rune(m.query.Text); len(r) > 0 {
-			m.query.Text = string(r[:len(r)-1])
-			m.cursor, m.top = 0, 0
-			m.refresh()
+		if m.caret > 0 {
+			m.edit(m.caret-1, m.caret, "")
 		}
-	case "ctrl+u":
-		m.query.Text = ""
-		m.cursor, m.top = 0, 0
-		m.refresh()
+	case "ctrl+u": // everything before the caret: the whole text when the caret is at the end
+		m.edit(0, m.caret, "")
 	case "space", " ":
-		m.query.Text += " "
-		m.cursor, m.top = 0, 0
-		m.refresh()
+		m.edit(m.caret, m.caret, " ")
 	default:
 		// Alt chords belong to the shell (Alt+M is the prompt's one-line/many-lines
 		// toggle). They arrive here as ordinary runes, so without this they get typed
@@ -314,12 +328,45 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if typed == "" {
 				break
 			}
-			m.query.Text += typed
-			m.cursor, m.top = 0, 0
-			m.refresh()
+			m.edit(m.caret, m.caret, typed)
 		}
 	}
 	return m, nil
+}
+
+// edit replaces the characters [from, to) of the filter text with s, leaves the caret just
+// after it, and searches again from the top of the list.
+func (m *Model) edit(from, to int, s string) {
+	r := []rune(m.query.Text)
+	if from == to && s == "" {
+		return
+	}
+	m.query.Text = string(r[:from]) + s + string(r[to:])
+	m.caret = from + len([]rune(s))
+	m.cursor, m.top = 0, 0
+	m.refresh()
+}
+
+// wordLeft is the start of the word before the caret; words are runs of non-spaces.
+func wordLeft(r []rune, i int) int {
+	for i > 0 && unicode.IsSpace(r[i-1]) {
+		i--
+	}
+	for i > 0 && !unicode.IsSpace(r[i-1]) {
+		i--
+	}
+	return i
+}
+
+// wordRight is the end of the word after the caret.
+func wordRight(r []rune, i int) int {
+	for i < len(r) && unicode.IsSpace(r[i]) {
+		i++
+	}
+	for i < len(r) && !unicode.IsSpace(r[i]) {
+		i++
+	}
+	return i
 }
 
 // pick handles a key while the group picker is open, and reports whether it used it.
