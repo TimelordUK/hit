@@ -24,6 +24,9 @@ BeforeAll {
 }
 
 Describe 'Invoke-HitCd' {
+    # An interactive shell's default. scripts/test.ps1 runs under Stop, where cd's error
+    # is thrown rather than written; that case has its own test below.
+    BeforeAll { $ErrorActionPreference = 'Continue' }
     BeforeEach {
         $root = Join-Path ([System.IO.Path]::GetTempPath()) ("hit-cd-" + [guid]::NewGuid())
         $null = New-Item -ItemType Directory -Path (Join-Path $root 'trd-platform' 'logs')
@@ -90,6 +93,13 @@ Describe 'Invoke-HitCd' {
         $err = Invoke-HitCd .\not-here 2>&1
         $err.Exception.Message | Should -BeLike "Cannot find path*not-here*"
         $err.InvocationInfo.Line | Should -BeLike '*Invoke-HitCd .\not-here*'
+    }
+
+    It 'throws under Stop, as Set-Location would' {
+        Use-FakeCd @{ action = 'none' }
+        $ErrorActionPreference = 'Stop'
+        { Invoke-HitCd nowhere-at-all } | Should -Throw -ExceptionType ([System.Management.Automation.ItemNotFoundException])
+        (Get-Location).ProviderPath | Should -Be (Join-Path $root 'trd-platform')
     }
 
     It 'names a match on the server name' {
