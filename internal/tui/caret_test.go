@@ -123,3 +123,25 @@ func TestTheCaretIsDrawnWhereItIs(t *testing.T) {
 		t.Errorf("query line %q should show the caret between i and t", first)
 	}
 }
+
+// T-023: Alt+' takes the whole filter literal ⇄ fuzzy, so the quote the finder opens with
+// comes out in one key, with the caret still on the same character.
+func TestAltQuoteTogglesLiteral(t *testing.T) {
+	m := sendAlt(caretModel(t, "'git checkout -b"), '\'')
+	if got := m.Query().Text; got != "git checkout -b" {
+		t.Errorf("off: text %q", got)
+	}
+	if m.Caret() != 15 {
+		t.Errorf("off: caret %d, want 15", m.Caret())
+	}
+	m = sendAlt(send(m, "left", "left"), '\'')
+	if got := m.Query().Text; got != "'git checkout -b" {
+		t.Errorf("on: text %q", got)
+	}
+	if m.Caret() != 14 {
+		t.Errorf("on: caret %d, want 14", m.Caret())
+	}
+	if !strings.Contains(view(m), "literal") {
+		t.Error("header should name literal once the quote is back")
+	}
+}

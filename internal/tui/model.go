@@ -273,6 +273,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.resetModes()
 	case "alt+g": // open the group picker (T-019); each further alt+g steps to the next
 		m.picking = m.hasCategories()
+	case "alt+'": // the whole filter literal ⇄ fuzzy: the leading quote in or out (T-005, T-023)
+		m.toggleLiteral()
 	case "ctrl+x": // hide/show failed commands
 		m.query.HideFailed = !m.query.HideFailed
 		m.refresh()
@@ -345,6 +347,19 @@ func (m *Model) edit(from, to int, s string) {
 	m.caret = from + len([]rune(s))
 	m.cursor, m.top = 0, 0
 	m.refresh()
+}
+
+// toggleLiteral puts the leading quote in, or takes it out, leaving the caret on the same
+// character of the text.
+func (m *Model) toggleLiteral() {
+	caret := m.caret
+	if strings.HasPrefix(m.query.Text, "'") {
+		m.edit(0, 1, "")
+		m.caret = max(caret-1, 0)
+	} else {
+		m.edit(0, 0, "'")
+		m.caret = caret + 1
+	}
 }
 
 // wordLeft is the start of the word before the caret; words are runs of non-spaces.

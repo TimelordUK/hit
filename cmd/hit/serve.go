@@ -351,6 +351,7 @@ func (s *server) finder(r Request) Response {
 	// Here the choice goes down the pipe, so the same applies.
 	cats := s.categories()
 	q.Case = search.Case(s.finderCfg.Case)
+	q.Text = openingText(q.Text, s.finderCfg.Buffer)
 	choice, err := runFinder(h, q, cats, "", true, log, tl)
 	if tl != nil {
 		timingf(s.env, "timing (go, served): %s", tl)

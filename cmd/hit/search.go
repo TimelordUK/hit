@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/TimelordUK/hit/internal/category"
@@ -104,6 +105,8 @@ func runSearch(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	q.Text = openingText(q.Text, finder.Buffer)
+
 	// cwd, session and host are logged because they decide what every scope but `all`
 	// shows, and a scope that comes up empty is indistinguishable from a broken finder
 	// without them.
@@ -146,6 +149,23 @@ func buildQuery(a searchArgs, at time.Time) search.Query {
 		Cwd: a.Cwd, Session: a.Session, Host: a.Host, Shell: a.Shell,
 		HideFailed: a.OkOnly, Limit: a.Limit, Now: at,
 	}
+}
+
+// openingText is the filter the finder opens with, given the prompt buffer. Text typed
+// at the prompt is the start of a command, so by default it is searched literally (T-023):
+// `git checkout -b` should not also find every command with those letters in order. The
+// quote is put in the filter, where it is seen and Alt+' takes it out again; trailing
+// space is dropped so `git checkout -b ` still finds `git checkout -b`. --print is left
+// alone: a script says what it means.
+func openingText(buf, mode string) string {
+	if mode == "fuzzy" || strings.HasPrefix(buf, "'") {
+		return buf
+	}
+	t := strings.TrimRight(buf, " 	")
+	if strings.TrimSpace(t) == "" {
+		return buf
+	}
+	return "'" + t
 }
 
 // clockNow is the current time, which HIT_NOW pins for tests.

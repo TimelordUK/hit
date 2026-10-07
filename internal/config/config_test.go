@@ -192,6 +192,19 @@ func TestFinderCase(t *testing.T) {
 	}
 }
 
+// [finder] buffer: "literal" (the default) or "fuzzy" (T-023), reported like case.
+func TestFinderBuffer(t *testing.T) {
+	for _, v := range []string{"literal", "fuzzy", "Fuzzy"} {
+		c := Parse("c.toml", "[finder]\nbuffer = \""+v+"\"\n")
+		if len(c.Problems) != 0 || c.Finder.Buffer != strings.ToLower(v) {
+			t.Errorf("%q: %+v", v, c)
+		}
+	}
+	if c := Parse("c.toml", "[finder]\nbuffer = \"exact\"\n"); c.Finder.Buffer != "" || len(c.Problems) != 1 {
+		t.Errorf("bad value should be reported and ignored: %+v", c)
+	}
+}
+
 // jump = true is opt-in (F-030); anything but a boolean is reported, not guessed at.
 func TestJump(t *testing.T) {
 	c := Parse("c.toml", `

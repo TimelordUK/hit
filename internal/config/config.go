@@ -56,6 +56,9 @@ type Capture struct {
 type Finder struct {
 	// Case is "ignore" or "smart" (C-041), lower-cased; empty means the default, ignore.
 	Case string
+	// Buffer is how text carried in from the prompt is searched: "literal" or "fuzzy"
+	// (T-023), lower-cased; empty means the default, literal.
+	Buffer string
 }
 
 // Load reads the config at path. A missing file is an empty config, not a problem: most
@@ -140,6 +143,14 @@ func parse(c Config, text string) Config {
 						c.Finder.Case = v
 					default:
 						c.Problems = append(c.Problems, fmt.Sprintf("finder: case %v: expected \"ignore\" or \"smart\"; ignoring case", t[k]))
+					}
+				case "buffer":
+					v, _ := t[k].(string)
+					switch v = strings.ToLower(v); v {
+					case "literal", "fuzzy":
+						c.Finder.Buffer = v
+					default:
+						c.Problems = append(c.Problems, fmt.Sprintf("finder: buffer %v: expected \"literal\" or \"fuzzy\"; searching it literally", t[k]))
 					}
 				default:
 					c.Problems = append(c.Problems, "finder: unknown field "+k)

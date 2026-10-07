@@ -100,12 +100,12 @@ func TestViewWithTimesFitsSmallPanes(t *testing.T) {
 func TestLiteralModeIsNamedInTheHeader(t *testing.T) {
 	m := testModel(t)
 	m.width, m.height = 90, 20
-	if strings.Contains(m.View(), "literal") {
+	if strings.Contains(strings.ReplaceAll(m.View(), "alt+' literal", ""), "literal") {
 		t.Error("literal should not be announced for an ordinary query")
 	}
 	m.query.Text = "'git"
 	m.refresh()
-	if !strings.Contains(m.View(), "literal") {
+	if !strings.Contains(strings.ReplaceAll(m.View(), "alt+' literal", ""), "literal") {
 		t.Errorf("literal mode is not named:\n%s", m.View())
 	}
 }

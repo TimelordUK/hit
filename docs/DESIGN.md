@@ -210,6 +210,7 @@ routes cannot drift apart.
 | Ctrl+R (finder) | cycle scope, narrowing a step at a time: all → host → session → dir |
 | Alt+D | this directory only ⇄ the scope it was on before |
 | Alt+S | sort: rank ⇄ recent |
+| Alt+' | the whole filter literal ⇄ fuzzy: the leading quote in or out, caret kept on its character (T-005, T-023) |
 | Alt+R | reset: scope all, sort rank, every group, failed shown, picker closed — the finder as it opens, in one key instead of one per mode (T-020). The typed text stays ("this, but everywhere"); Ctrl+U clears it. A first step towards T-013's filter stack, which would pop one layer at a time |
 | Alt+G | group picker (§17.1; only with categories configured): then a group's mark letter jumps to it (its own letter again: all groups), Alt+G again steps to the next, Esc closes the picker. Any other key closes it and works as usual |
 | type / Backspace / Ctrl+U | filter at the caret, delete the character before it, delete everything before it (the whole text with the caret at the end) |
@@ -280,6 +281,14 @@ else in the query is an ordinary character, which matters because commands are f
 Both modes hand their matched positions to one scoring function, so neither is quietly
 favoured in the ranking (C-030). The header names the mode, rather than leaving it to be
 inferred from a character that is easy to miss.
+
+**Text from the prompt opens literal (T-023).** What is typed before Ctrl+R is the start of
+a command — `git checkout -b` — and the owner was arrowing back to add the quote nearly
+every time. So the finder puts the quote in for you and drops trailing space, so
+`git checkout -b ` still finds `git checkout -b`. The quote sits in the filter where it can
+be seen, and **Alt+'** takes it out (or puts it back) in one key. A buffer that already
+opens with a quote is left alone, `--print` is never changed (a script says what it
+means), and `[finder] buffer = "fuzzy"` opens with the text as typed.
 
 **Ranking** (`internal/search`, golden-tested): match quality × frequency (log, so a command
 run 500 times doesn't bury one run twice) × recency (halves every 7 days, with a floor) ×

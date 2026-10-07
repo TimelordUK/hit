@@ -94,8 +94,11 @@ git clone https://github.com/TimelordUK/hit.git; cd hit
 
 Both work in vi and Windows edit modes.
 
-**In the finder:** type to filter (fuzzy, in order; a capital letter makes that letter
-case-sensitive). Multi-line commands show a `⏎ +N` marker, with the whole command, its
+**In the finder:** type to filter (fuzzy, in order, case ignored). A leading `'` makes the
+rest a literal substring, as in fzf. Text you had typed at the prompt opens literal — the
+`'` is put in for you, so `git checkout -b` then Ctrl+R finds only those words together;
+`Alt+'` takes it out (or puts it back), and `[finder] buffer = "fuzzy"` in `config.toml`
+opens fuzzy instead. Multi-line commands show a `⏎ +N` marker, with the whole command, its
 directory, exit code and duration in the preview.
 
 | Key | What it does |
@@ -110,6 +113,7 @@ directory, exit code and duration in the preview.
 | `Ctrl+R` | narrow the scope a step: everything → this machine → this session → this directory |
 | `Alt+D` | this directory only, and the same key back to where you were |
 | `Alt+S` | sort by rank ⇄ most recent first |
+| `Alt+'` | the whole filter literal ⇄ fuzzy (the leading `'` in or out) |
 | `Alt+G` | pick a [category](#categories): then its letter jumps to it, `Alt+G` again steps to the next |
 | `Ctrl+X` | hide or show commands that failed |
 | `Alt+R` | reset every mode above to how the finder opens; your typed text stays |

@@ -187,6 +187,25 @@ func TestSearchCaseFollowsTheConfig(t *testing.T) {
 	}
 }
 
+// T-023: text carried in from the prompt opens the finder literal, since it is the start
+// of a command; Owner 2026-10-07: "git checkout -b <ctrl-r> … mostly I tend to use literal
+// searches", arrowing back to add the quote by hand. `buffer = "fuzzy"` keeps it as typed.
+func TestOpeningText(t *testing.T) {
+	for _, c := range []struct{ buf, mode, want string }{
+		{"git checkout -b", "", "'git checkout -b"},
+		{"git checkout -b ", "", "'git checkout -b"},
+		{"git checkout -b", "literal", "'git checkout -b"},
+		{"'already", "", "'already"},
+		{"", "", ""},
+		{"   ", "", "   "},
+		{"git checkout -b ", "fuzzy", "git checkout -b "},
+	} {
+		if got := openingText(c.buf, c.mode); got != c.want {
+			t.Errorf("openingText(%q, %q) = %q, want %q", c.buf, c.mode, got, c.want)
+		}
+	}
+}
+
 // The resident server takes [finder] from the same reload as the categories, so editing
 // the case rule shows up at the next Ctrl+R too.
 func TestServerReloadsFinderSettings(t *testing.T) {
