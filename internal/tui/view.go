@@ -571,14 +571,17 @@ func (m Model) renderPreview(s styles, rows int, now time.Time) string {
 	}
 	var b strings.Builder
 	b.WriteString(s.dim.Render(truncate(describe(r, now), m.width)) + "\n")
-	lines := strings.Split(r.Entry.Cmd, "\n")
-	shown := rows - 1
-	for i := 0; i < shown && i < len(lines); i++ {
-		if i == shown-1 && len(lines) > shown {
-			b.WriteString(truncate(strings.TrimRight(lines[i], "\r"), m.width-6) +
-				s.dim.Render(fmt.Sprintf(" … +%d", len(lines)-shown)))
+	lines, hidden := wrapCommand(r.Entry.Cmd, m.width, rows-1)
+	for i, line := range lines {
+		if i == len(lines)-1 && hidden > 0 {
+			more := fmt.Sprintf(" … +%d", hidden)
+			// Cut, not truncate: the marker already says there is more.
+			if rs, w := []rune(line), max(0, m.width-len([]rune(more))); len(rs) > w {
+				line = string(rs[:w])
+			}
+			b.WriteString(line + s.dim.Render(more))
 		} else {
-			b.WriteString(truncate(strings.TrimRight(lines[i], "\r"), m.width))
+			b.WriteString(line)
 		}
 		b.WriteString("\n")
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/search"
@@ -495,7 +496,7 @@ func (m Model) maxPreviewRows() int {
 }
 
 // previewRows is how many rows the preview actually takes: one metadata line plus the
-// command's lines, capped.
+// command's rows as wrapped to the pane, capped.
 func (m Model) previewRows() int {
 	limit := m.maxPreviewRows()
 	if limit == 0 {
@@ -505,11 +506,46 @@ func (m Model) previewRows() int {
 	if !ok {
 		return 0
 	}
-	n := 1 + strings.Count(r.Entry.Cmd, "\n") + 1
-	if n > limit {
-		return limit
+	rows, _ := wrapCommand(r.Entry.Cmd, m.width, limit-1)
+	return 1 + len(rows)
+}
+
+// wrapCommand lays a command out in rows of at most width runes: each of its own lines,
+// broken at a space where one falls in the back half of the row, otherwise mid-word. At
+// most limit rows are built; hidden is how many more the whole command would take, counted
+// without building them, so a huge entry in history costs a rune count and no more (T-024).
+func wrapCommand(cmd string, width, limit int) (rows []string, hidden int) {
+	if width < 1 || limit < 1 {
+		return nil, 0
 	}
-	return n
+	for _, line := range strings.Split(cmd, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if len(rows) == limit {
+			hidden += max(1, (utf8.RuneCountInString(line)+width-1)/width)
+			continue
+		}
+		rs := []rune(line)
+		for {
+			if len(rows) == limit {
+				hidden += max(1, (len(rs)+width-1)/width)
+				break
+			}
+			if len(rs) <= width {
+				rows = append(rows, string(rs))
+				break
+			}
+			cut := width
+			for i := width; i > width/2; i-- {
+				if rs[i-1] == ' ' {
+					cut = i
+					break
+				}
+			}
+			rows = append(rows, string(rs[:cut]))
+			rs = rs[cut:]
+		}
+	}
+	return rows, hidden
 }
 
 func (m Model) listRows() int {

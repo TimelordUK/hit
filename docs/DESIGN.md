@@ -317,7 +317,8 @@ session bonuses look at every run of that command, not just the latest.
   read as "dim" against the terminal's own background disappears on a coloured one.
 
 - **Multi-line is first class**: the list shows the command flattened onto one line with a
-  `⏎ +3` marker, and a preview pane shows it in full.
+  `⏎ +3` marker, and a preview pane shows it in full: each line wrapped to the pane, up to
+  the preview's row cap, then `… +N` for the rows left over (T-024).
 
   The row used to show the *first line only*, which failed on exactly the commands worth
   recalling: a block starting `& {` or `foreach ($x in $y) {` renders as that opener and

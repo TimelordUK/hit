@@ -321,3 +321,55 @@ func TestViewFitsSmallPanes(t *testing.T) {
 		}
 	}
 }
+
+// T-024: a long one-line command wraps in the preview instead of ending at the pane edge.
+func TestPreviewWrapsALongLine(t *testing.T) {
+	long := `sql-cli .\data\countries.csv -q "with all as (select * from countries), lc as (SELECT l.cca3 as iso,l.latlng,l.borders, split_part(l.latlng,',',1) as lat,  split_part(l.latlng,',',2) as lon, l.area, unnest(l.borders,',') as border from all l where l.cca3='BRA') select lc.*,r.latlng from lc inner join all r on l.border=r.cca3" -o table`
+	m := send(testModel(t, record.Record{K: record.KindCmd, ID: "E", TS: ts(10), Cmd: long, Cwd: `C:\dev\hit`, Sh: "pwsh", Sid: "s1"}), "'sql-cli")
+	var tm tea.Model = m
+	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	v := tm.(Model).View()
+	for _, part := range []string{"l.cca3='BRA')", "inner join all r", "-o table"} {
+		if !strings.Contains(v, part) {
+			t.Errorf("preview does not show %q:\n%s", part, v)
+		}
+	}
+	for _, line := range strings.Split(v, "\n") {
+		if w := lipglossWidth(line); w > 120 {
+			t.Errorf("line is %d wide, pane is 120: %q", w, line)
+		}
+	}
+}
+
+func TestWrapCommand(t *testing.T) {
+	cases := []struct {
+		name   string
+		cmd    string
+		width  int
+		limit  int
+		rows   []string
+		hidden int
+	}{
+		{"fits", "git status", 20, 5, []string{"git status"}, 0},
+		{"at a space", "aaaa bbbb cccc", 10, 5, []string{"aaaa bbbb ", "cccc"}, 0},
+		{"no space late enough", "a bbbbbbbbbbbb", 10, 5, []string{"a bbbbbbbb", "bbbb"}, 0},
+		{"own lines first", "one\r\ntwo", 10, 5, []string{"one", "two"}, 0},
+		{"capped, rest counted", strings.Repeat("x", 45), 10, 2, []string{"xxxxxxxxxx", "xxxxxxxxxx"}, 3},
+		{"capped across lines", "aa\nbb\n\ncc", 10, 1, []string{"aa"}, 3},
+		{"no room", "git status", 0, 5, nil, 0},
+	}
+	for _, c := range cases {
+		rows, hidden := wrapCommand(c.cmd, c.width, c.limit)
+		if strings.Join(rows, "|") != strings.Join(c.rows, "|") || len(rows) != len(c.rows) || hidden != c.hidden {
+			t.Errorf("%s: got %q +%d, want %q +%d", c.name, rows, hidden, c.rows, c.hidden)
+		}
+	}
+}
+
+// A pathological entry still costs only the capped rows.
+func TestWrapCommandHugeEntry(t *testing.T) {
+	rows, hidden := wrapCommand(strings.Repeat("y", 1<<20), 100, 5)
+	if len(rows) != 5 || hidden != (1<<20)/100+1-5 {
+		t.Errorf("got %d rows +%d", len(rows), hidden)
+	}
+}
