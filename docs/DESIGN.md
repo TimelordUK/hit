@@ -416,7 +416,8 @@ and nothing is stat'ed. Not the typed text (`cd logs` means nothing without its 
 directories reached any other way (a script's `Set-Location`, `Pop-Location`): only places
 you chose to go.
 
-**Steps.** Each is a small named rule, tried in order; the first that finds anything wins.
+**Steps.** Each is a small named rule, tried in order; the first that finds anything wins,
+exact names first (below).
 
 | # | Step | Rule |
 |---|---|---|
@@ -429,8 +430,12 @@ Step 2 is what keeps you inside the project without defining "project": no `.git
 list of roots, just tree distance from where you stand. No unvisited directory is ever
 guessed, except the one that exists right here (step 0).
 
-**Within a step**, an exact last segment beats a substring (C-035) and frecency only breaks
-ties, so a near substring still beats a distant exact name. **Matching is substring, never
+**An exact name comes first.** An exact last segment beats a substring at any distance
+(C-035, C-043): the steps above order the exact matches, then the substring ones, and
+frecency only breaks ties. So a distant exact name beats a near substring. Owner
+2026-10-11: from one of msnodesqlv8's examples under `sql\app`, `cd msnodesqlv8` went to a
+sibling example (one up) and never reached the module itself, `sql\v8\node_modules\msnodesqlv8`
+(two up), until exact moved ahead of nearness. **Matching is substring, never
 fuzzy**: per path segment, ignoring case on Windows; fuzzy matching on directories makes
 too many odd matches. With several terms each matches a segment in order and the last must
 match the last segment, so `cd devs logs` takes `\\devserv001\logs`.
@@ -454,12 +459,22 @@ miss is reported, never pruned.
   real folders in `testdata/` so step 0 runs against a real disk. Every bad jump from daily
   use becomes a row before the fix (§13.3). Seed rows: `gdt-platform` beside
   `gdt-platform-launch`, and `logs` in the current repo against `\\devserv001\logs`.
-- A guessed jump says why: `→ \\devserv001\logs (nearest, exact)`. A real path says nothing.
+- A guessed jump says why: `→ \\devserv001\logs (nearest, exact)`, and where it is in the
+  matches when there is more than one: `(nearest, 2/11)`. A real path says nothing.
 - `hit cd --explain <terms>` lists each step's candidates and which step won, as
   `hit categories --explain` does for categories.
 - The step order moves to config only if the table shows reordering is wanted.
 
-**When it guesses wrong:** `cd -` goes back (F-031 grows this into back and forward),
+**The same `cd` again steps on (F-034, 2026-10-11).** Repeating the same terms from where
+the last jump landed takes the next match in the list ranked from where the *first* jump
+started, and past the last it wraps round. Without this, two siblings that each match best
+from inside the other swap for ever (`msnodesqlv8-api-tour` ⇄ `todo-with-nextjs_msnodesqlv8`).
+Different terms, or a `cd` from anywhere else, start afresh. The shell keeps the last jump
+(terms, start, landing, count) in the session, so nothing is stored and nothing extra is
+spawned; it asks with `next` (`--next N` on `hit cd --json`) and the answer carries
+`rank` and `of`.
+
+**When it guesses wrong:** repeat the `cd` (above), `cd -` goes back (F-031 grows this into back and forward),
 `Set-Location` is never replaced and stays literal, and `Alt+C` opens the finder to pick by
 hand. No on/off key: those cover it without another piece of state.
 

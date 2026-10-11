@@ -64,6 +64,15 @@ var world = []Candidate{
 	{Dir: `D:\data\logs`, Score: 12},
 }
 
+// modules is the owner's msnodesqlv8 day (2026-10-11): the module itself, and examples
+// beside each other whose names contain it, visited far more.
+var modules = []Candidate{
+	{Dir: `~\dev\sql\v8\node_modules\msnodesqlv8`, Score: 14.5},
+	{Dir: `~\dev\sql\app\msnodesqlv8-api-tour`, Score: 22},
+	{Dir: `~\dev\sql\app\todo-with-nextjs_msnodesqlv8`, Score: 14.5},
+	{Dir: `~\dev\sql\app\msnodesqlv8-react`, Score: 4.5},
+}
+
 // TestResolve is the tuning table (DESIGN §8.1). A bad jump from daily use becomes a row
 // here before the rules change.
 func TestResolve(t *testing.T) {
@@ -102,6 +111,11 @@ func TestResolve(t *testing.T) {
 			want: `~\dev\personal-docs\scripts`, step: Nearest, exact: true},
 		{name: "near beats another drive", cwd: `~`, query: `data logs`,
 			want: `~\dev\trd-platform\data\logs`, step: Below, exact: true},
+
+		// C-043: an exact name beats nearness. Owner 2026-10-11, a day across msnodesqlv8's
+		// examples: `cd msnodesqlv8` from one example went to the next, never the module.
+		{name: "an exact name further up beats a nearer partial one", cwd: `~\dev\sql\app\msnodesqlv8-api-tour`, query: `msnodesqlv8`,
+			want: `~\dev\sql\v8\node_modules\msnodesqlv8`, step: Nearest, exact: true, world: modules},
 
 		// Shares: the host is a segment, matched by substring.
 		{name: "share by host and folder", cwd: `~\dev\trd-platform`, query: `devs logs`,

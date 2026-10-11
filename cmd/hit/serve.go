@@ -52,6 +52,9 @@ type Request struct {
 	Ping bool `json:"ping,omitempty"`
 	// Jump asks where `cd <terms>` would go from Cwd (F-030), and draws nothing.
 	Jump []string `json:"jump,omitempty"`
+	// Next is how many times this cd has been repeated from where it first started: it
+	// steps down the matches (F-034).
+	Next int `json:"next,omitempty"`
 }
 
 // Response is the finder's answer. Its shape is the same JSON the cold path writes to
@@ -70,6 +73,10 @@ type Response struct {
 	Step     string `json:"step,omitempty"`
 	Exact    bool   `json:"exact,omitempty"`
 	ByServer bool   `json:"byServer,omitempty"` // matched by a share's server name
+	// Rank of Of: where the jump is in the matches, so a repeated cd can say how far down
+	// it has stepped (F-034).
+	Rank int `json:"rank,omitempty"`
+	Of   int `json:"of,omitempty"`
 	// Server describes the process answering, and rides only on a ping reply, so
 	// `hit status` can say what is resident without a second kind of request (C-034).
 	Server *ServerInfo `json:"server,omitempty"`
@@ -375,7 +382,7 @@ func (s *server) jump(r Request) Response {
 		return Response{Error: err.Error()}
 	}
 	debugf(s.env, "serve: jump %q from %q: %d matches of %d", r.Jump, r.Cwd, len(a.matches), a.candidates)
-	return a.response()
+	return a.response(r.Next)
 }
 
 // responseFor is the finder's choice as the server sends it: the same JSON the cold path

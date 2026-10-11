@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestCdJSONIsWhatTheServerSends(t *testing.T) {
 	if err := json.Unmarshal([]byte(runCmd(t, env, "cd", "--json", "--cwd", `C:\Users\owner`, "devs", "logs")), &res); err != nil {
 		t.Fatal(err)
 	}
-	want := Response{Action: "jump", Cwd: `\\devserv001\logs`, Step: "anywhere", Exact: true}
+	want := Response{Action: "jump", Cwd: `\\devserv001\logs`, Step: "anywhere", Exact: true, Rank: 1, Of: 1}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("cold: %+v, want %+v", res, want)
 	}
@@ -67,10 +68,39 @@ func TestCdJSONIsWhatTheServerSends(t *testing.T) {
 	}
 }
 
+// F-034: the same cd again steps through the matches, ranked from where the first one
+// started, and wraps. Owner 2026-10-11: `cd msnodesqlv8` repeated swapped between two
+// examples for ever.
+func TestCdNextStepsThroughTheMatches(t *testing.T) {
+	const app = `C:\Users\owner\dev\sql\app\`
+	module := `C:\Users\owner\dev\sql\v8\node_modules\msnodesqlv8`
+	env := jumpHistory(t, jumpConfig, module,
+		app+`msnodesqlv8-api-tour`, app+`msnodesqlv8-api-tour`, app+`todo-with-nextjs_msnodesqlv8`)
+	from := app + `msnodesqlv8-api-tour`
+	s := &server{env: env}
+	for next, want := range []Response{
+		{Action: "jump", Cwd: module, Step: "nearest", Exact: true, Rank: 1, Of: 2},
+		{Action: "jump", Cwd: app + `todo-with-nextjs_msnodesqlv8`, Step: "nearest", Rank: 2, Of: 2},
+		{Action: "jump", Cwd: module, Step: "nearest", Exact: true, Rank: 1, Of: 2}, // round again
+	} {
+		var cold Response
+		args := []string{"cd", "--json", "--cwd", from, "--next", strconv.Itoa(next), "msnodesqlv8"}
+		if err := json.Unmarshal([]byte(runCmd(t, env, args...)), &cold); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(cold, want) {
+			t.Errorf("cold, next %d: %+v, want %+v", next, cold, want)
+		}
+		if got := s.jump(Request{Jump: []string{"msnodesqlv8"}, Cwd: from, Next: next}); !reflect.DeepEqual(got, want) {
+			t.Errorf("served, next %d: %+v, want %+v", next, got, want)
+		}
+	}
+}
+
 // A few letters of a server's name reach it, and the answer says so (2026-10-04).
 func TestCdByServerName(t *testing.T) {
 	env := jumpHistory(t, jumpConfig, `\\d-k7q2x9.adp1.corp.pte\logs`)
-	want := Response{Action: "jump", Cwd: `\\d-k7q2x9.adp1.corp.pte\logs`, Step: "anywhere", ByServer: true}
+	want := Response{Action: "jump", Cwd: `\\d-k7q2x9.adp1.corp.pte\logs`, Step: "anywhere", ByServer: true, Rank: 1, Of: 1}
 	if got := (&server{env: env}).jump(Request{Jump: []string{"adp1"}, Cwd: `C:\Users\owner`}); !reflect.DeepEqual(got, want) {
 		t.Errorf("served: %+v, want %+v", got, want)
 	}

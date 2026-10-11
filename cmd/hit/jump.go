@@ -56,13 +56,15 @@ func resolveJump(env paths.Env, cats *category.Set, terms []string, cwd string) 
 	return a, nil
 }
 
-// response is the answer as the shell reads it, from the pipe or from --json.
-func (a jumpAnswer) response() Response {
+// response is the answer as the shell reads it, from the pipe or from --json: the match
+// the same cd repeated next times takes (F-034), and where it is in the list.
+func (a jumpAnswer) response(next int) Response {
 	if len(a.matches) == 0 {
 		return Response{Action: "none"}
 	}
-	m := a.matches[0]
-	return Response{Action: "jump", Cwd: m.Dir, Step: string(m.Step), Exact: m.Exact, ByServer: m.Server}
+	m, rank := jump.Nth(a.matches, next)
+	return Response{Action: "jump", Cwd: m.Dir, Step: string(m.Step), Exact: m.Exact, ByServer: m.Server,
+		Rank: rank, Of: len(a.matches)}
 }
 
 func isDir(dir string) bool {
@@ -78,13 +80,14 @@ func runCd(args []string, env paths.Env, stdout, stderr io.Writer) int {
 		asJSON  = flags.Bool("json", false, "answer as the shell reads it")
 		explain = flags.Bool("explain", false, "list every match, best first, and the step that takes it")
 		top     = flags.Int("top", 10, "with --explain: matches to show")
+		next    = flags.Int("next", 0, "with --json: the same cd repeated this many times steps down the matches")
 	)
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 	terms := flags.Args()
 	if len(terms) == 0 {
-		fmt.Fprintln(stderr, "usage: hit cd [--explain] [--json] [--cwd DIR] [--] <terms…>")
+		fmt.Fprintln(stderr, "usage: hit cd [--explain] [--json [--next N]] [--cwd DIR] [--] <terms…>")
 		return 2
 	}
 	dir := *cwd
@@ -100,7 +103,7 @@ func runCd(args []string, env paths.Env, stdout, stderr io.Writer) int {
 
 	switch {
 	case *asJSON:
-		if err := writeJSONLine(stdout, a.response()); err != nil {
+		if err := writeJSONLine(stdout, a.response(*next)); err != nil {
 			fmt.Fprintln(stderr, "hit:", err)
 			return 1
 		}
@@ -128,7 +131,7 @@ func writeJumpExplain(w io.Writer, a jumpAnswer, terms []string, cwd string, top
 		fmt.Fprintf(w, "  a real path: Set-Location %s, nothing searched\n", a.matches[0].Dir)
 		return
 	}
-	fmt.Fprintf(w, "  %d of %d places match: below, then the fewest folders up, then anywhere; a folder name before a server name, exact before partial, then frecency\n\n",
+	fmt.Fprintf(w, "  %d of %d places match: exact before partial, then below, the fewest folders up, anywhere; a folder name before a server name, then frecency\n\n",
 		len(a.matches), a.candidates)
 	for i, m := range a.matches {
 		if i == top {

@@ -1009,6 +1009,10 @@ function Invoke-HitToggleMultiline {
 
 $script:HitCdBound = $false
 
+# The last jump: its terms, where it started, where it landed and how many times it has
+# been repeated. The same cd again from where it landed takes the next match (F-034).
+$script:HitCdLast = $null
+
 # Spawns `hit cd --json` and returns its output; tests replace it.
 $script:HitCdRunner = {
     param([string[]]$Arguments)
@@ -1026,13 +1030,15 @@ function Test-HitRealPath([string]$Path) {
 
 # Where hit would jump: the server's answer, or a spawned `hit cd --json`. $null when hit
 # could not say, which the caller treats as no jump.
-function Resolve-HitJump([string[]]$Terms, [string]$Here) {
+function Resolve-HitJump([string[]]$Terms, [string]$Here, [int]$Next = 0) {
     if ($script:HitServerMode) {
-        $res = Invoke-HitServerRequest -Request @{ jump = $Terms; cwd = $Here }
+        $res = Invoke-HitServerRequest -Request @{ jump = $Terms; cwd = $Here; next = $Next }
         if ($res -and -not $res.error) { return $res }
         if ($res) { Write-HitDebug ("server jump error: " + $res.error) } else { Start-HitServer }
     }
-    $text = & $script:HitCdRunner (@('cd', '--json', '--cwd', $Here, '--') + $Terms)
+    $flags = @('cd', '--json', '--cwd', $Here)
+    if ($Next -gt 0) { $flags += '--next', "$Next" }
+    $text = & $script:HitCdRunner ($flags + '--' + $Terms)
     if ($text) { ConvertFrom-Json (@($text) -join "`n") }
 }
 
@@ -1044,11 +1050,17 @@ function Invoke-HitCd {
         return
     }
     $terms = [string[]]$args
+    $last, $script:HitCdLast = $script:HitCdLast, $null
     $res = $null
     $to = if ($terms.Count -eq 1 -and (Test-HitRealPath $terms[0])) { @{ Path = $terms[0] } }
     if (-not $to) {
+        $here = Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation
+        $from, $next = $here, 0
+        if ($last -and $last.Terms -eq ($terms -join ' ') -and $last.To -eq $here) {
+            $from, $next = $last.From, ($last.Next + 1)
+        }
         try {
-            $res = Resolve-HitJump $terms (Get-HitLocationPath $ExecutionContext.SessionState.Path.CurrentLocation)
+            $res = Resolve-HitJump $terms $from $next
         } catch {
             Write-HitDebug ("jump error: " + ($_ | Out-String))
         }
@@ -1064,8 +1076,13 @@ function Invoke-HitCd {
         return
     }
     if (-not $res) { return }
-    # A guess says why, so a rule that misfires can be seen (§8.1).
-    $why = if ($res.exact) { "$($res.step), exact" } elseif ($res.byServer) { "$($res.step), server" } else { $res.step }
+    $script:HitCdLast = @{ Terms = $terms -join ' '; From = $from; To = $res.cwd; Next = $next }
+    # A guess says why, so a rule that misfires can be seen (§8.1), and where it is in the
+    # matches when there are more, so a repeat can be seen stepping (F-034).
+    $why = @($res.step)
+    if ($res.exact) { $why += 'exact' } elseif ($res.byServer) { $why += 'server' }
+    if ($res.of -gt 1) { $why += "$($res.rank)/$($res.of)" }
+    $why = $why -join ", "
     # The arrow as [char]: the script reaches pwsh through the console's encoding (shell_test.go).
     Write-Host ("{0} {1} ({2})" -f [char]0x2192, $res.cwd, $why) -ForegroundColor DarkGray
 }

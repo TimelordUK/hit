@@ -57,6 +57,16 @@ func Resolve(cands []Candidate, cwd string, terms []string, o Options) (r Result
 	return ms[0].Result, true
 }
 
+// Nth is the match the same cd repeated next times takes (F-034): 0 is the best, and past
+// the last it wraps round. rank is 1-based, for the shell to say where in the list it is.
+func Nth(ms []Match, next int) (m Match, rank int) {
+	i := next % len(ms)
+	if i < 0 {
+		i += len(ms)
+	}
+	return ms[i], i + 1
+}
+
 // Match is one directory that matched, with the step that would take it.
 type Match struct {
 	Result
@@ -106,17 +116,20 @@ func Explain(cands []Candidate, cwd string, terms []string, o Options) []Match {
 	return ms
 }
 
-// better orders matches: nearer, then a folder's name over a server's, then exact, then
-// frecency, then the path so ties are stable from one run to the next.
+// better orders matches: exact, then nearer, then a folder's name over a server's, then
+// frecency, then the path so ties are stable from one run to the next. An exact name
+// beats nearness (C-043): the whole name typed is the strongest thing said, and siblings
+// whose names merely contain it are what pushed it out (`msnodesqlv8` against its
+// examples beside you).
 func better(a, b Match) bool {
+	if a.Exact != b.Exact {
+		return a.Exact
+	}
 	if a.Up != b.Up {
 		return a.Up < b.Up
 	}
 	if a.Server != b.Server {
 		return !a.Server
-	}
-	if a.Exact != b.Exact {
-		return a.Exact
 	}
 	if a.Score != b.Score {
 		return a.Score > b.Score

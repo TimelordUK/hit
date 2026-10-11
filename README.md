@@ -193,16 +193,21 @@ jump     = true
 where `logs` is here, `..`, `-`, `C:\x`, `\\server\share`) is plain `Set-Location` and never
 asks hit. Anything else is a guess:
 
-- **Near beats far.** Below where you are first, then one folder up at a time, then other
+- **An exact folder name comes first**, wherever it is: `cd msnodesqlv8` takes the module,
+  not the examples beside you whose names contain it.
+- **Then near beats far.** Below where you are first, then one folder up at a time, then other
   drives and shares. From inside a project, `cd logs` finds that project's `logs`, not a
   busier one elsewhere.
-- **An exact folder name beats a partial one**; after that, most visited and most recent.
+- After that, most visited and most recent.
+- **The same `cd` again goes to the next match**, round and round, so two look-alikes
+  never trap you swapping between them.
 - **Partial, never fuzzy.** The last word must match the last folder: `cd devs logs` finds
   `\\devserv001\logs`.
 - **A few letters of a server's name reach it**: `cd adp1` takes you to the place you use
   most on `\\d-k7q2x9.adp1.corp.pte`. A folder name still beats a server name.
 
-A guess says where it went and why (`→ …\data\logs (nearest, exact)`). When it is wrong,
+A guess says where it went and why (`→ …\data\logs (nearest, exact)`), and how far down
+the matches it is when there are several (`(nearest, 2/11)`). When it is wrong, repeat it,
 `cd -` goes back, and `Set-Location` is never replaced. `hit cd --explain <words>` lists every
 match in order. With no `jump = true` category, or nothing visited yet, `cd` is untouched.
 If zoxide is set up with `--cmd cd`, drop the `--cmd cd`: whichever loads last owns `cd`.

@@ -102,6 +102,35 @@ Describe 'Invoke-HitCd' {
         (Get-Location).ProviderPath | Should -Be (Join-Path $root 'trd-platform')
     }
 
+    # F-034: the same cd again, from where it landed, asks for the next match ranked from
+    # where the first one started. Owner 2026-10-11: swapped between two for ever.
+    It 'steps down the matches when the same cd is repeated' {
+        $data = Join-Path $root 'trd-platform' 'data'
+        $logs = Join-Path $root 'trd-platform' 'data' 'logs'
+        $from = Join-Path $root 'trd-platform'
+        Use-FakeCd @{ action = 'jump'; cwd = $data; step = 'below'; rank = 1; of = 2 }
+        $said = Invoke-HitCd dat 6>&1
+        "$said" | Should -Be "$([char]0x2192) $data (below, 1/2)"
+        Use-FakeCd @{ action = 'jump'; cwd = $logs; step = 'below'; rank = 2; of = 2 }
+        $said = Invoke-HitCd dat 6>&1
+        $script:Cd.Arguments | Should -Be @('cd', '--json', '--cwd', $from, '--next', '1', '--', 'dat')
+        "$said" | Should -Be "$([char]0x2192) $logs (below, 2/2)"
+        Use-FakeCd @{ action = 'jump'; cwd = $data; step = 'below'; rank = 1; of = 2 }
+        Invoke-HitCd dat 6>$null
+        $script:Cd.Arguments | Should -Be @('cd', '--json', '--cwd', $from, '--next', '2', '--', 'dat')
+    }
+
+    It 'starts afresh after other terms, or from somewhere else' {
+        $data = Join-Path $root 'trd-platform' 'data'
+        Use-FakeCd @{ action = 'jump'; cwd = $data; step = 'below'; rank = 1; of = 2 }
+        Invoke-HitCd dat 6>$null
+        Invoke-HitCd da 6>$null
+        $script:Cd.Arguments | Should -Be @('cd', '--json', '--cwd', $data, '--', 'da')
+        Invoke-HitCd ..
+        Invoke-HitCd da 6>$null
+        $script:Cd.Arguments | Should -Be @('cd', '--json', '--cwd', (Join-Path $root 'trd-platform'), '--', 'da')
+    }
+
     It 'names a match on the server name' {
         Use-FakeCd @{ action = 'jump'; cwd = (Join-Path $root 'trd-platform' 'data'); step = 'anywhere'; byServer = $true }
         $said = Invoke-HitCd adp1 6>&1
