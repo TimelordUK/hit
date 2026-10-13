@@ -491,6 +491,101 @@ stops you moving. zoxide's `--cmd cd` binds the same alias, so whichever loads l
 `cd`. Not built yet: the timeout when the jump target is on a share (above), so a dead
 server still stalls `Set-Location` as it always has.
 
+### 8.2 The trail and workspaces (F-031, F-035; PROPOSAL 2026-10-13, not built)
+
+**OPEN: a proposal to try, not yet agreed.** Agreed so far: `±n` steps over the shell's trail.
+
+**The day it is for.** A day's work is five or six places: three repos under `~\dev`,
+`~\dev\personal-docs` for its scripts, a share's logs, and the elastic hosts, where the
+complaint is "constantly forgetting which hosts have what". `cd <terms>` (§8.1) finds any
+of them, but you have to know the words, and the hosts' names are what you forget. navi
+did not help: "so many labels I would forget even what label I wanted". The want: **see
+the list with no clutter, pick by number or a short label, and go back and forth between
+them as fast as possible.**
+
+**Three things, kept apart** so each stays simple:
+
+| | What it holds | Lives | Used by |
+|---|---|---|---|
+| history | every place a jump command took you (§8.1) | the JSONL, for ever | `cd <terms>` |
+| trail | the order you moved in this shell | the shell; gone when it closes | `cd -`/`cd +`, `cdw -n`/`cdw +n` |
+| workspace | a named, small, closed set of places, labels optional | its own file, until removed | `cdw` |
+
+The trail and the workspace both looked like answers to the same want, but they pull
+against each other: a capped trail drops its oldest entry and reorders, so "2" stops
+meaning the same folder. Fixed numbers need a set that changes only when you change it.
+So the trail gives you order and the workspace gives you names.
+
+**The trail (F-031).** A capped list (a deque) of the places this shell has been, with a
+cursor in it, kept in the shell session: no spawn, no record, free. `-n` moves the cursor
+back n places and `+n` forward. Going somewhere new from the middle drops everything ahead
+of the cursor, as a browser does. A new shell starts with an empty trail, so nothing
+carries over and there is nothing to reconcile. If that turns out wrong, this session's
+`cd` records already hold enough to rebuild it, but not in the first cut.
+
+**A workspace (F-035).** A name, then up to about nine places in a fixed order, each with
+an optional short label:
+
+```toml
+# workspaces.toml, beside config.toml: hit writes it, you may edit it
+[[workspace]]
+name = "dev-es3"
+places = [
+  { dir = '\\enode-prim\logs',         label = "prim" },
+  { dir = '\\elastic_node_host2\logs', label = "n2" },
+  { dir = '\\elastic_node_host3\logs', label = "n3" },
+  { dir = '~\dev\personal-docs',       label = "pd" },
+  { dir = '~\dev\es-tools' },
+]
+```
+
+- **The number always works and the label is a bonus.** The list is short and `cdw` shows
+  it every time, so there is nothing to remember. This is the cure for navi's pile of
+  labels.
+- **A place need not have been visited**: you add it, which is F-028's pin in a group.
+  A workspace is not only a view over history.
+- **Listing never stats** (§8), so a dead host lists instantly. Only the place you pick is
+  checked, when you go there, with the share timeout §8.1 still owes.
+- **Open per shell.** `cdw <name>` opens one in this shell. A new shell has none open; `cdw`
+  then lists the workspaces to choose from.
+
+**`cdw`, as sketched:**
+
+```
+cdw                  the open workspace, numbered with labels; pick one
+                     (none open: the workspaces, to open one)
+cdw dev-es3          open it in this shell and show its list
+cdw 2                its second place
+cdw n2  /  cdw prim  by label, else a substring of the folder, inside the workspace only
+cdw -3  /  cdw +3    back / forward three on the trail (same as cd -3 / cd +3)
+cdw add [label]      add where you stand to the open workspace
+cdw rm <n|label>     take a place out
+```
+
+`cd` is untouched: it still jumps over all of history (§8.1). Inside a workspace, `cdw`
+searches only the workspace, which is why it is a separate command and not another rule
+in `cd`'s steps.
+
+**Open questions:**
+
+1. **Storage.** Recommended: a hit-owned `workspaces.toml` beside `config.toml`, so `cdw add`
+   never rewrites the config you write by hand and the file can still be edited. The
+   alternatives are a section of `config.toml`, or a new record kind in the history
+   (append-only, but awkward to edit by hand).
+2. **Name against label.** `cdw prim` could name a workspace or a place in the open one.
+   Proposed: the open workspace's places first, since that is the frequent case, with
+   `cdw open <name>` as the unambiguous form.
+3. **Renumbering.** Does `cdw rm` close the gap (numbers shift) or leave the slot empty?
+   Closing it is simpler, and the list is always shown anyway.
+4. **The finder.** Does the directory finder (`Alt+C`, T-011) get a workspace scope and a
+   trail scope, with the numbers shown?
+5. **Pins.** Do F-028's pinned folders (`Downloads`, `%LOCALAPPDATA%`, …) become a workspace
+   that is always open, or stay places that only `cd` sees?
+6. **Showing the trail.** `cdw -` with no number could draw the trail with the cursor
+   marked, so you read off the n instead of guessing it.
+7. **Size.** The trail's cap (20?) and whether a workspace past nine places is refused or
+   allowed.
+
 ## 9. Safety guards (prod failsafes)
 
 Avoid sending the wrong thing to prod on a Monday morning.
