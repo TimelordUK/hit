@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/config"
 	"github.com/TimelordUK/hit/internal/ipc"
 	"github.com/TimelordUK/hit/internal/paths"
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
 	"github.com/TimelordUK/hit/internal/tui"
 )
 

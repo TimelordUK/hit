@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // Step is the rule that chose a target. The steps are tried in this order and the first

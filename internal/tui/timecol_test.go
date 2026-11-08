@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

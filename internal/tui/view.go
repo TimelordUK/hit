@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/search"
+	"github.com/TimelordUK/hit/history/search"
 	"github.com/charmbracelet/lipgloss"
 )
 

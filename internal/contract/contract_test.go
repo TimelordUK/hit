@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/oklog/ulid/v2"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )

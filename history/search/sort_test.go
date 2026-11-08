@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // Ranking answers "what do I most likely want next"; recency answers "what did I just

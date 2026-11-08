@@ -15,8 +15,8 @@ try {
 
     if ($Fuzz -gt 0) {
         $targets = @(
-            @('./internal/record', 'FuzzCommandRoundTrip'),
-            @('./internal/store', 'FuzzRead')
+            @('./history/record', 'FuzzCommandRoundTrip'),
+            @('./history/store', 'FuzzRead')
         )
         foreach ($t in $targets) {
             go test $t[0] -run '^$' -fuzz "^$($t[1])$" -fuzztime "$($Fuzz)s"

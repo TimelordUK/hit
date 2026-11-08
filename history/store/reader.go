@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/TimelordUK/hit/internal/record"
+	"github.com/TimelordUK/hit/history/record"
 )
 
 // Stats counts what the reader saw. Skipped lines are never fatal, but

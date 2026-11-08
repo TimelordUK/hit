@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/paths"
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/store"
 )
 
 const jumpConfig = `

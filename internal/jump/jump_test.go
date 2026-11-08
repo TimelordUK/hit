@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // home is where the tests stand. Paths under it are real folders in testdata/home (the

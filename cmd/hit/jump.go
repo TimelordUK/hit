@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/jump"
 	"github.com/TimelordUK/hit/internal/paths"
-	"github.com/TimelordUK/hit/internal/store"
 )
 
 // `hit cd <terms>` (F-030, DESIGN §8.1): where cd would jump, without going there. The

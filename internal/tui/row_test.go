@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // A real one from the owner's work machine. Its first line is a bare `& {`, which every

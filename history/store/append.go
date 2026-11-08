@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/TimelordUK/hit/internal/record"
+	"github.com/TimelordUK/hit/history/record"
 )
 
 // Append writes records to the history file at path, creating it (and its

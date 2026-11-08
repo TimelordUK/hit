@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // Scope narrows which entries are considered.

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/paths"
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/store"
 )
 
 // isolated gives a command its own history and config, never the owner's real ones.

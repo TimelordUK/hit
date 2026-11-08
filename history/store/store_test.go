@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/TimelordUK/hit/internal/record"
+	"github.com/TimelordUK/hit/history/record"
 )
 
 func read(t *testing.T, s string) ([]record.Record, Stats) {

@@ -66,6 +66,22 @@ Existing tools each get close and then fail in a way that matters every day:
 - `hit init pwsh` / `hit init zsh` prints the integration script (the atuin/zoxide pattern),
   so the script and the binary version always match: `Invoke-Expression (& hit init pwsh | Out-String)`.
 
+**The history library (C-044, 2026-11-08).** The record format, the store and the ranking are
+public packages, so another tool can keep a history of its own in hit's format and rank it
+the same way. The first user is jqv (github.com/TimelordUK/jqv), whose REPL keeps its jq
+queries in a JSONL file of its own: `cmd` the query, `cwd` the document, `sh` `"jq"`, `exit`
+whether it ran, so `HideFailed` hides the broken ones and the `dir` scope is "this
+document".
+
+- `history/record`: the on-disk record (§4.2), encode/decode, ids.
+- `history/store`: append, the tolerant reader, merging into a `History`.
+- `history/search`: filtering, duplicate collapse and ranking (§6). Categories come in as a
+  `Keep` function, so the package needs nothing else of hit's.
+
+They depend only on each other and the standard library (and ulid). Everything else stays
+in `internal/`: the finder, categories, config, jumps, the resident server. Changing an
+exported name in `history/` breaks jqv, so do it on purpose, with a tag, as for any module.
+
 ## 4. Storage
 
 ### 4.1 Location
@@ -290,7 +306,7 @@ be seen, and **Alt+'** takes it out (or puts it back) in one key. A buffer that 
 opens with a quote is left alone, `--print` is never changed (a script says what it
 means), and `[finder] buffer = "fuzzy"` opens with the text as typed.
 
-**Ranking** (`internal/search`, golden-tested): match quality × frequency (log, so a command
+**Ranking** (`history/search`, golden-tested): match quality × frequency (log, so a command
 run 500 times doesn't bury one run twice) × recency (halves every 7 days, with a floor) ×
 bonuses for this directory (1.5), this session (1.2) and a penalty for a failed exit (0.7).
 Matching is a case-insensitive subsequence (smart-case by config), scored on contiguity,

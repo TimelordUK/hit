@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 // T-022: the filter text could only be typed or deleted at its end. Owner 2026-10-04:

@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/config"
 	"github.com/TimelordUK/hit/internal/paths"
-	"github.com/TimelordUK/hit/internal/store"
 )
 
 // `hit categories` (C-038): the tuning loop for categories (DESIGN §17.1).

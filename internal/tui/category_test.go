@@ -5,11 +5,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/TimelordUK/hit/history/record"
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/category"
 	"github.com/TimelordUK/hit/internal/config"
-	"github.com/TimelordUK/hit/internal/record"
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 )

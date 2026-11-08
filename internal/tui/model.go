@@ -9,9 +9,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/TimelordUK/hit/history/search"
+	"github.com/TimelordUK/hit/history/store"
 	"github.com/TimelordUK/hit/internal/category"
-	"github.com/TimelordUK/hit/internal/search"
-	"github.com/TimelordUK/hit/internal/store"
 	"github.com/TimelordUK/hit/internal/timing"
 	tea "github.com/charmbracelet/bubbletea"
 )

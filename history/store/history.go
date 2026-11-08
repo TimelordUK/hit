@@ -3,7 +3,7 @@ package store
 import (
 	"time"
 
-	"github.com/TimelordUK/hit/internal/record"
+	"github.com/TimelordUK/hit/history/record"
 )
 
 // Entry is a command with its end record merged in.

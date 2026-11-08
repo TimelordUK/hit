@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/TimelordUK/hit/internal/search"
+	"github.com/TimelordUK/hit/history/search"
 )
 
 // Alt+R puts every mode back to how the finder opens — scope all, sort rank, every group,

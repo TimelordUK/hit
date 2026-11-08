@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TimelordUK/hit/internal/store"
+	"github.com/TimelordUK/hit/history/store"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -80,7 +80,7 @@ func loadHistory(t *testing.T) *store.History {
 
 var fixtureNow = time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
 
-// Golden files keep ranking changes visible: `go test ./internal/search -update` re-blesses.
+// Golden files keep ranking changes visible: `go test ./history/search -update` re-blesses.
 func TestRankingGolden(t *testing.T) {
 	h := loadHistory(t)
 	base := Query{Cwd: `C:\dev\hit`, Session: "s3", Host: "box1", Shell: "pwsh", Now: fixtureNow}
@@ -132,7 +132,7 @@ func compareGolden(t *testing.T, name, got string) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%v (run: go test ./internal/search -update)", err)
+		t.Fatalf("%v (run: go test ./history/search -update)", err)
 	}
 	if got != string(want) {
 		t.Errorf("golden %s differs:\n--- got ---\n%s--- want ---\n%s", name, got, want)
