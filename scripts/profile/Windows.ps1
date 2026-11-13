@@ -50,4 +50,5 @@ if ($ripgrepPath) {
 # . C:\Users\Stephen\dev\f7hist.ps1
 
 $env:HIT_SERVER = 1
+$env:HIT_UP = 1          # S-009: Up searches what is typed (ignored by binaries before it)
 $env:HIT_TIMING = 1

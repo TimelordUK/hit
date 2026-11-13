@@ -30,4 +30,5 @@ rg --generate complete-powershell | Out-String | Invoke-Expression
 fd --gen-completions powershell 2>$null | Out-String | Invoke-Expression
 
 $env:HIT_SERVER = 1
+$env:HIT_UP = 1          # S-009: Up searches what is typed (ignored by binaries before it)
 $env:HIT_TIMING = 1
