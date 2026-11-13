@@ -241,6 +241,7 @@ function Write-HitEnv {
 # $At is when the prompt started (Stopwatch timestamp): the command's duration ends there,
 # not after the wrapped prompt has drawn itself.
 function Invoke-HitPrompt([bool]$Success, $ExitCode, [long]$At = [System.Diagnostics.Stopwatch]::GetTimestamp()) {
+    Reset-HitUpWalk
     try {
         if (-not $script:HitHistoryPath) { return }
         if ($p = $script:HitPending) {
@@ -321,6 +322,7 @@ function Enable-Hit {
     if ($env:HIT_SERVER) {
         Enable-HitServer -Idle ($env:HIT_SERVER_IDLE ? $env:HIT_SERVER_IDLE : '30m')
     }
+    if ($env:HIT_UP) { Enable-HitUpSearch }
 }
 
 # Stops recording and puts back the handler and prompt hit wrapped.
@@ -340,6 +342,7 @@ function Disable-Hit {
     $script:HitPending = $null
     $script:HitServerMode = $false
     if ($script:HitKeysBound) { Remove-HitKeyHandlers }
+    Disable-HitUpSearch
     Unregister-HitCd
 }
 
@@ -358,6 +361,11 @@ $script:HitEditor = @{
         [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
         $line
     }
+    GetCursor = {
+        $line = $null; $cursor = $null
+        [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+        $cursor
+    }
     SetBuffer = {
         param([string]$Text)
         [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
@@ -371,6 +379,9 @@ $script:HitEditor = @{
         Write-Host $Message -ForegroundColor DarkGray
         [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
     }
+    Ding         = { [Microsoft.PowerShell.PSConsoleReadLine]::Ding() }
+    PreviousLine = { [Microsoft.PowerShell.PSConsoleReadLine]::PreviousLine() }
+    NextLine     = { [Microsoft.PowerShell.PSConsoleReadLine]::NextLine() }
 }
 
 # Appends to $TEMP\hit-debug.log when HIT_DEBUG is set. The finder swallows its errors so a
@@ -799,6 +810,139 @@ function Remove-HitKeyHandlers {
     Set-HitKeyHandler -Chord 'Ctrl+r' -Options @{ Function = 'ReverseSearchHistory' }
     Set-HitKeyHandler -Chord 'Alt+m' -Options @{ Function = 'SelfInsert' }
     $script:HitKeysBound = $false
+}
+
+# ---------------------------------------------------------------------------------------
+# Up/Down (S-009, DESIGN §5), as zsh-history-substring-search: with text on the line, Up
+# walks only the commands containing it, newest first; on an empty line it is plain Up.
+# Down walks back and, past the newest, gives back what was typed. Editing a recalled line
+# and pressing Up searches again on the edited text. Opt-in: Enable-HitUpSearch, or
+# $env:HIT_UP before init.
+#
+# The matches are fetched once when a walk starts and stepped through in memory: from the
+# resident server when there is one (hit's history, every session's), else PSReadLine's own
+# history. Up never starts a process, because it is pressed far too often to pay for one.
+# ---------------------------------------------------------------------------------------
+
+$script:HitUpBound = $false
+# The walk: what was typed, what was last put on the line, the matches newest first, and
+# where in them we are (-1 is the line as typed). $null when not walking.
+$script:HitUpWalk = $null
+
+# Where a walk's matches come from. Replaced in tests.
+$script:HitUpSource = { param([string]$Text) Get-HitUpItems $Text }
+
+function Reset-HitUpWalk { $script:HitUpWalk = $null }
+
+# PSReadLine's history, oldest first. Its own function so tests can stand in for it.
+function Get-HitPSReadLineHistory {
+    [Microsoft.PowerShell.PSConsoleReadLine]::GetHistoryItems() | ForEach-Object CommandLine
+}
+
+# The commands containing $Text (case-insensitive, as PowerShell is), newest first, each
+# once, leaving out $Text itself, one per output. Pure; the same rule as search.Recall on the Go side.
+function Select-HitUpItems([string[]]$Lines, [string]$Text) {
+    $q = $Text.Trim()
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $out = [System.Collections.Generic.List[string]]::new()
+    for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
+        $l = $Lines[$i]
+        if ([string]::IsNullOrWhiteSpace($l) -or $l.Trim() -ieq $q) { continue }
+        if ($q -and $l.IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        if ($seen.Add($l)) { $out.Add($l) }
+    }
+    $out
+}
+
+# The matches for a new walk. The server only when it is this version: one from before
+# S-009 would take the request for a finder and draw it. Short timeouts, because a key is
+# waiting; any failure falls back to PSReadLine's history, never to starting a server.
+function Get-HitUpItems([string]$Text) {
+    if ($script:HitServerMode) {
+        $ping = Invoke-HitServerRequest -Request @{ ping = $true } -ConnectTimeoutMs 100 -ReadTimeoutMs 300
+        if ($ping -and $ping.pong -and (-not $script:HitVersion -or $ping.version -eq $script:HitVersion)) {
+            $res = Invoke-HitServerRequest -ConnectTimeoutMs 100 -ReadTimeoutMs 1000 -Request @{
+                up = $Text; session = $script:HitSessionId; shell = 'pwsh'
+            }
+            if ($res -and $res.action -eq 'recall') {
+                Write-HitDebug ("up: {0} served for {1}" -f @($res.cmds).Where({ $null -ne $_ }).Count, $Text)
+                return $res.cmds | Where-Object { $null -ne $_ }
+            }
+            if ($res) { Write-HitDebug ("up: server error: " + $res.error) }
+        }
+    }
+    Select-HitUpItems @(Get-HitPSReadLineHistory) $Text
+}
+
+# One step of the walk: +1 older, -1 newer. Returns the line to show, or $null to leave
+# the line alone (nothing older, or not walking). Pure but for the source.
+function Step-HitUpWalk([string]$Buffer, [int]$Delta) {
+    $w = $script:HitUpWalk
+    $walking = $w -and $Buffer -ceq $w.Shown
+    if ($Delta -gt 0) {
+        if (-not $walking) {
+            $w = @{ Draft = $Buffer; Shown = $Buffer; Items = @(& $script:HitUpSource $Buffer); Pos = -1 }
+            $script:HitUpWalk = $w
+        }
+        if ($w.Pos + 1 -ge $w.Items.Count) { return $null }
+        $w.Pos++
+    } else {
+        if (-not $walking -or $w.Pos -lt 0) { return $null }
+        $w.Pos--
+    }
+    $w.Shown = if ($w.Pos -lt 0) { $w.Draft } else { $w.Items[$w.Pos] }
+    $w.Shown
+}
+
+# The Up/Down handler. While editing a multi-line command the keys move between its lines,
+# as PSReadLine's do; a command the walk put there is walked past, wherever the cursor is.
+function Invoke-HitUp([int]$Delta) {
+    try {
+        $buffer = [string](& $script:HitEditor.GetBuffer)
+        $w = $script:HitUpWalk
+        if (-not ($w -and $buffer -ceq $w.Shown) -and $buffer.Contains("`n")) {
+            $cursor = & $script:HitEditor.GetCursor
+            if ($Delta -gt 0 -and $buffer.LastIndexOf("`n", [Math]::Max(0, $cursor - 1)) -ge 0 -and $cursor -gt 0) {
+                & $script:HitEditor.PreviousLine
+                return
+            }
+            if ($Delta -lt 0 -and $buffer.IndexOf("`n", [Math]::Min($cursor, $buffer.Length)) -ge 0) {
+                & $script:HitEditor.NextLine
+                return
+            }
+        }
+        $line = Step-HitUpWalk $buffer $Delta
+        if ($null -eq $line) {
+            if ($Delta -gt 0) { & $script:HitEditor.Ding }
+            return
+        }
+        & $script:HitEditor.SetBuffer $line
+        # What the editor holds, not what we asked for, so the next press knows the line
+        # is still ours even if the editor normalised it.
+        $script:HitUpWalk.Shown = [string](& $script:HitEditor.GetBuffer)
+    } catch {
+        Write-HitDebug ("up error: " + ($_ | Out-String))
+    }
+}
+
+function Enable-HitUpSearch {
+    Set-HitKeyHandler -Chord 'UpArrow' -Options @{ ScriptBlock = { Invoke-HitUp 1 }; BriefDescription = 'HitUpSearch'
+        Description = 'Previous command, or the previous one containing what is typed'
+    }
+    Set-HitKeyHandler -Chord 'DownArrow' -Options @{ ScriptBlock = { Invoke-HitUp -1 }; BriefDescription = 'HitDownSearch'
+        Description = 'Next command in the walk Up started, then what was typed'
+    }
+    $script:HitUpBound = $true
+    $script:HitUpWalk = $null
+}
+
+# Gives Up and Down back to PSReadLine.
+function Disable-HitUpSearch {
+    if (-not $script:HitUpBound) { return }
+    Set-HitKeyHandler -Chord 'UpArrow' -Options @{ Function = 'PreviousHistory' }
+    Set-HitKeyHandler -Chord 'DownArrow' -Options @{ Function = 'NextHistory' }
+    $script:HitUpBound = $false
+    $script:HitUpWalk = $null
 }
 
 # ---------------------------------------------------------------------------------------

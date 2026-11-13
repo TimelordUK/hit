@@ -39,7 +39,7 @@ $script:HitExe = %s
 $script:HitVersion = %s
 %s
 %s
-Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer, Get-HitStatus, Invoke-HitCd
+Export-ModuleMember -Function Enable-Hit, Disable-Hit, Invoke-HitFinder, Enable-HitServer, Disable-HitServer, Get-HitStatus, Invoke-HitCd, Invoke-HitUp, Enable-HitUpSearch, Disable-HitUpSearch
 } | Import-Module -Global
 `, version, psQuote(exe), psQuote(version), pwshScript, enable)
 	return err

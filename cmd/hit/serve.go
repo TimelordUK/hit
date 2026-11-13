@@ -55,6 +55,9 @@ type Request struct {
 	// Next is how many times this cd has been repeated from where it first started: it
 	// steps down the matches (F-034).
 	Next int `json:"next,omitempty"`
+	// Up asks for the commands Up at the prompt walks through with this text on the line
+	// (S-009), and draws nothing. A pointer, because a blank line is a real question.
+	Up *string `json:"up,omitempty"`
 }
 
 // Response is the finder's answer. Its shape is the same JSON the cold path writes to
@@ -77,6 +80,8 @@ type Response struct {
 	// it has stepped (F-034).
 	Rank int `json:"rank,omitempty"`
 	Of   int `json:"of,omitempty"`
+	// Cmds answers Up: the matches, newest first.
+	Cmds []string `json:"cmds,omitempty"`
 	// Server describes the process answering, and rides only on a ping reply, so
 	// `hit status` can say what is resident without a second kind of request (C-034).
 	Server *ServerInfo `json:"server,omitempty"`
@@ -153,6 +158,9 @@ func runServe(args []string, env paths.Env, stdout, stderr io.Writer) int {
 	s.run(func(r Request) Response {
 		if len(r.Jump) > 0 {
 			return s.jump(r)
+		}
+		if r.Up != nil {
+			return s.up(r)
 		}
 		return s.finder(r)
 	})
@@ -383,6 +391,28 @@ func (s *server) jump(r Request) Response {
 	}
 	debugf(s.env, "serve: jump %q from %q: %d matches of %d", r.Jump, r.Cwd, len(a.matches), a.candidates)
 	return a.response(r.Next)
+}
+
+// recallLimit caps what one Up sends back; nobody presses Up a thousand times.
+const recallLimit = 1000
+
+// up answers Up at the prompt without drawing. Read fresh, as for the finder, so the
+// command just run is the first one back.
+func (s *server) up(r Request) Response {
+	histPath, err := paths.History(s.env)
+	if err != nil {
+		return Response{Error: err.Error()}
+	}
+	recs, _, err := store.ReadFile(histPath)
+	if err != nil {
+		return Response{Error: err.Error()}
+	}
+	s.categories() // loads [finder], whose case rule Up shares
+	cmds := search.Recall(store.Build(recs), search.RecallQuery{
+		Text: *r.Up, Session: r.Session, Shell: r.Shell, Case: search.Case(s.finderCfg.Case), Limit: recallLimit,
+	})
+	debugf(s.env, "serve: up %q: %d matches", *r.Up, len(cmds))
+	return Response{Action: "recall", Cmds: cmds}
 }
 
 // responseFor is the finder's choice as the server sends it: the same JSON the cold path

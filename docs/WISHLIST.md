@@ -63,7 +63,7 @@ stay there — IDs never move — so look in both when hunting for prior art.
 | S-006 | pwsh: leading-space = don't record | M1 | done |
 | S-007 | pwsh: Enter guard (re-bind AcceptLine) for prod rules | M2 | idea |
 | S-008 | pwsh: Alt+C directory finder → `Set-Location`; `j <terms>` jump | M2 | planned |
-| S-009 | pwsh: Up/Down stepping backed by hit (prefix-filtered, multi-line aware) instead of PSReadLine's | ? | idea |
+| S-009 | pwsh: Up/Down stepping backed by hit, as zsh-history-substring-search (DESIGN §5, owner 2026-11-13, after jqv's R-011): with text on the line Up walks only the commands containing it, newest first; on an empty line it is plain Up; Down walks back and past the newest gives back what was typed; editing a recalled line searches again. Substring and case-insensitive, not PSReadLine's prefix (F8), so `def` finds `… \| def`. Matches fetched once per walk, not per press: from the resident server when on (hit's history, this session's first, then everyone's; `search.Recall`, shared with jqv), else PSReadLine's history, so Up never spawns. Multi-line aware: while editing one the keys move between its lines. Opt-in (`$env:HIT_UP`, `Enable-HitUpSearch`): it takes two more keys than §14.1's two. **Built 2026-11-13 on branch `s-009-up-search`, for the owner to try at work.** Not yet: the `1/4 matching` note jqv shows, vi command mode's `k`/`j` | M2 | doing |
 | S-010 | zsh: `zshaddhistory` / `precmd` / `chpwd` hooks, backgrounded writes | M3 | planned |
 | S-011 | zsh: Ctrl+R / Alt+C widgets, `${(z)}` tidy formatter | M3 | planned |
 | S-012 | zsh: antidote-installable plugin layout | M3 | planned |

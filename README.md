@@ -213,9 +213,24 @@ match in order. With no `jump = true` category, or nothing visited yet, `cd` is 
 If zoxide is set up with `--cmd cd`, drop the `--cmd cd`: whichever loads last owns `cd`.
 Full rules: [DESIGN §8.1](docs/DESIGN.md).
 
+### Up that searches (opt-in)
+
+```powershell
+$env:HIT_UP = 1                  # then open a new terminal; or Enable-HitUpSearch now
+```
+
+Up on an empty line steps back as it always has. Type something first and Up walks only the
+commands **containing** it, newest first: `def` then Up finds `jq '.[] | def'`, which
+PSReadLine's prefix search (F8) never would. Down walks back and, past the newest, gives back
+what you typed. Change a recalled line and Up searches again on the new text. Case doesn't
+matter. With the resident finder on (below) it searches hit's history, this shell's commands
+first; without it, PSReadLine's own. Either way Up never starts a process.
+`Disable-HitUpSearch` gives Up and Down back to PSReadLine.
+
 ### Turning it off
 
-`Disable-Hit` stops recording in the current session and gives Ctrl+R back to PSReadLine.
+`Disable-Hit` stops recording in the current session and gives Ctrl+R (and Up/Down, if hit had
+them) back to PSReadLine.
 Remove the profile line to stop it permanently. Your history file stays where it is.
 
 ### If something misbehaves

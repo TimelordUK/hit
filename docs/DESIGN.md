@@ -182,6 +182,23 @@ unloads it. This is the only process spawn, and it happens once at shell startup
 - Leading-space commands are not recorded (opt-out convention, like bash `HISTCONTROL`).
   Nor are blank ones: nothing but whitespace or control characters (S-036).
 - Cost: ~0.8 ms per command (Enter + prompt, two appends) on the owner's machine.
+- **Up/Down, opt-in (S-009):** as zsh-history-substring-search. With text on the line, Up
+  walks only the commands containing it (substring, case-insensitive), newest first, each once;
+  on an empty line it is plain Up. Down walks back and, past the newest, gives back what was
+  typed. A line the walk put there is walked on from; a line changed since starts a new walk on
+  the changed text. The walk ends at the next prompt.
+  - **Where the matches come from:** fetched once when a walk starts, then stepped in memory.
+    With the resident server (§16) on and answering at this version, an `up` request returns
+    `search.Recall` over hit's history: this session's commands first, then every other
+    session's, so a command run in another pane never cuts in front of the one just run here.
+    Otherwise PSReadLine's own history (`GetHistoryItems`), in-process. Up never starts a
+    process or a server: it is pressed far too often to pay for one. The server's version is
+    checked first, because one from before S-009 would take the request for a finder and draw.
+  - **Multi-line:** while editing a multi-line command that the walk did not put there, the
+    keys move between its lines (`PreviousLine`/`NextLine`) until the cursor is on the first
+    (Up) or last (Down) line.
+  - **Opt-in** (`$env:HIT_UP` before init, or `Enable-HitUpSearch`/`Disable-HitUpSearch`),
+    because §14.1 promises two keys and this takes two more. `Disable-Hit` gives them back.
 
 ### zsh
 

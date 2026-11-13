@@ -267,4 +267,24 @@ Describe 'Against a real hit serve' {
         $s.Pid | Should -Be $script:Server.Id
         $s.ParentIsUs | Should -BeTrue
     }
+
+    # S-009: Up's matches come from hit's history, this session's first, and nothing draws.
+    It 'answers Up with the matching commands, newest first' {
+        $hist = Join-Path $env:HIT_DATA_DIR 'history.jsonl'
+        $n = 0
+        foreach ($c in @('git status', 'ls', 'git log', 'git status')) {
+            $n++
+            $null = Add-HitLine -Path $hist -Line (ConvertTo-HitJsonLine (New-HitRecord -Kind cmd -Id (New-HitId) `
+                        -Timestamp "2026-11-13T09:00:0$n.000Z" -Command $c -Shell pwsh -SessionId $script:HitSessionId))
+        }
+        $script:HitServerMode = $true
+        $script:HitVersion = (Invoke-HitServerRequest -Request @{ ping = $true }).version
+        try {
+            Mock Get-HitPSReadLineHistory { throw 'fell back' }
+            @(Get-HitUpItems 'git') | Should -Be @('git status', 'git log')
+            @(Get-HitUpItems 'zzz').Count | Should -Be 0
+        } finally {
+            $script:HitServerMode = $false
+        }
+    }
 }
