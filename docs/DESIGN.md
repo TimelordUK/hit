@@ -194,9 +194,12 @@ unloads it. This is the only process spawn, and it happens once at shell startup
     Otherwise PSReadLine's own history (`GetHistoryItems`), in-process. Up never starts a
     process or a server: it is pressed far too often to pay for one. The server's version is
     checked first, because one from before S-009 would take the request for a finder and draw.
-  - **Multi-line:** while editing a multi-line command that the walk did not put there, the
-    keys move between its lines (`PreviousLine`/`NextLine`) until the cursor is on the first
-    (Up) or last (Down) line.
+  - **Multi-line:** while editing a multi-line command, the keys move between its lines
+    (`PreviousLine`/`NextLine`) until the cursor is on the first (Up) or last (Down) line,
+    then walk on. A command the walk just recalled is walked past while the cursor stays
+    where the walk left it (the end); moving the cursor (Left, Home) makes it one being
+    edited, as with PSReadLine's own Up. Before this, a recalled multi-line command could
+    not be edited line by line at all.
   - **Opt-in** (`$env:HIT_UP` before init, or `Enable-HitUpSearch`/`Disable-HitUpSearch`),
     because §14.1 promises two keys and this takes two more. `Disable-Hit` gives them back.
 

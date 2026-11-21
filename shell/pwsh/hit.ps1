@@ -895,13 +895,16 @@ function Step-HitUpWalk([string]$Buffer, [int]$Delta) {
 }
 
 # The Up/Down handler. While editing a multi-line command the keys move between its lines,
-# as PSReadLine's do; a command the walk put there is walked past, wherever the cursor is.
+# as PSReadLine's do. A command the walk put there is walked past while the cursor stays
+# where the walk left it; move the cursor (Left, Home) and it is being edited, so the keys
+# move between its lines, and walk on again from its first or last line.
 function Invoke-HitUp([int]$Delta) {
     try {
         $buffer = [string](& $script:HitEditor.GetBuffer)
+        $cursor = & $script:HitEditor.GetCursor
         $w = $script:HitUpWalk
-        if (-not ($w -and $buffer -ceq $w.Shown) -and $buffer.Contains("`n")) {
-            $cursor = & $script:HitEditor.GetCursor
+        $ours = $w -and $buffer -ceq $w.Shown -and $cursor -eq $w.ShownCursor
+        if (-not $ours -and $buffer.Contains("`n")) {
             if ($Delta -gt 0 -and $buffer.LastIndexOf("`n", [Math]::Max(0, $cursor - 1)) -ge 0 -and $cursor -gt 0) {
                 & $script:HitEditor.PreviousLine
                 return
@@ -920,6 +923,7 @@ function Invoke-HitUp([int]$Delta) {
         # What the editor holds, not what we asked for, so the next press knows the line
         # is still ours even if the editor normalised it.
         $script:HitUpWalk.Shown = [string](& $script:HitEditor.GetBuffer)
+        $script:HitUpWalk.ShownCursor = & $script:HitEditor.GetCursor
     } catch {
         Write-HitDebug ("up error: " + ($_ | Out-String))
     }

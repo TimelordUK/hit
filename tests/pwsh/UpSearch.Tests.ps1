@@ -176,6 +176,34 @@ Describe 'Up/Down at the prompt (S-009)' {
             Up; $script:Editor.Buffer | Should -Be 'git one'
             $script:Editor.LinesUp | Should -Be 0
         }
+
+        It 'edits a recalled multi-line command once the cursor is moved off the end' {
+            Use-FakeHistory @('git one', "git two ```n  -x", 'other')
+            Use-FakeEditor 'git'
+            Up; $script:Editor.Buffer | Should -Be "git two ```n  -x"
+            $script:Editor.Cursor--          # Left
+            Up
+            $script:Editor.Buffer | Should -Be "git two ```n  -x"
+            $script:Editor.LinesUp | Should -Be 1
+        }
+
+        It 'walks on from the first line of a recalled command after the cursor moved' {
+            Use-FakeHistory @('git one', "git two ```n  -x", 'other')
+            Use-FakeEditor 'git'
+            Up
+            $script:Editor.Cursor = 2        # on the first line
+            Up; $script:Editor.Buffer | Should -Be 'git one'
+        }
+
+        It 'moves down a line in a recalled command after the cursor moved' {
+            Use-FakeHistory @('git one', "git two ```n  -x", 'other')
+            Use-FakeEditor 'git'
+            Up
+            $script:Editor.Cursor = 2
+            Down
+            $script:Editor.LinesDown | Should -Be 1
+            $script:Editor.Buffer | Should -Be "git two ```n  -x"
+        }
     }
 
     Describe 'Where the matches come from' {
